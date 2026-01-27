@@ -1,3 +1,4 @@
+// backend/server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -13,82 +14,118 @@ const cursosRoutes = require("./routes/cursos.routes");
 const matriculasRoutes = require("./routes/matriculas.routes");
 const izipayRoutes = require("./routes/izipay.routes");
 const seccionesRoutes = require("./routes/secciones.routes");
+
 const facturasRoutes = require("./routes/facturas.routes");
+
+
+
 const comprasRoutes = require("./routes/compras.routes");
 const catalogosRoutes = require("./routes/catalogos.routes");
 
+
 const app = express();
 
-// =======================
-// LOGS INICIALES
-// =======================
-console.log("MP_ACCESS_TOKEN:", !!process.env.MP_ACCESS_TOKEN);
-console.log("FRONT_URL:", process.env.FRONT_URL);
+console.log("TOKEN MP:", process.env.MP_ACCESS_TOKEN);
+console.log("FRONT_URL usando:", process.env.FRONT_URL);
 
-// =======================
+
 // CORS
-// =======================
-const allowedOrigins = ["https://rpcinventario.gruecolimp.com"];
-app.use(cors({
-    origin: function(origin, callback){
-        if(!origin) return callback(null, true);
-        if(allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error("CORS no permitido"), false);
-    },
-    credentials: true
-}));
-app.options("*", cors());
+const allowedOrigins = [
+  "https://rpcinventario.gruecolimp.com", // tu frontend real
+  "http://localhost:5173"                     // para desarrollo
+];
 
-// =======================
-// BODY PARSER
-// =======================
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.log("❌ CORS bloqueado para:", origin);
+        return callback(new Error("Not allowed by CORS"), false);
+      }
+    },
+    credentials: true,
+  })
+);
+
+
+
 app.use(bodyParser.json());
 
-// =======================
-// CONEXIÓN DB (POOL GLOBAL)
-// =======================
-let dbPool = null;
+// Conexión BD
 (async () => {
-    try {
-        dbPool = await initDB();
-        await dbPool.getConnection();
-        console.log("✅ Conectado a MySQL → Base:", process.env.DB_NAME);
-    } catch (err) {
-        console.error("⚠️ No se pudo conectar a MySQL:", err.message);
-    }
+  try {
+    const pool = await initDB();
+    await pool.getConnection();
+    console.log("✅ Conectado a MySQL → Base:", process.env.DB_NAME);
+  } catch (err) {
+    console.error("❌ Error conectando a MySQL:", err.message);
+  }
 })();
 
-// =======================
-// RUTAS
-// =======================
-app.use("/pagos", pagosRoutes);
+// 🔵 RUTAS API
+app.use("/pagos", pagosRoutes);          // ESTE PRIMERO SIEMPRE
 app.use("/auth", authRoutes);
-app.use("/cursos", cursosRoutes);
+
+
 app.use("/secciones", seccionesRoutes);
+
 app.use("/facturas", facturasRoutes);
 app.use("/matriculas", matriculasRoutes);
+
+
+
+// ⚠ REGISTRAR RUTAS DE USUARIOS AQUÍ
 app.use("/usuarios", require("./routes/usuarios.routes"));
+
 app.use("/admin", require("./routes/admin.routes"));
+
+// ⚠ IZIPAY DEBE IR DESPUÉS PARA NO ROMPER /pagos/yape/iniciar
 app.use("/pagos/izipay", izipayRoutes);
+
 app.use("/estudiantes", require("./routes/estudiantes.routes"));
+
 app.use("/secretaria", require("./routes/secretaria.routes"));
+
+
+
+// registrar rutas docentes (colócalo junto a las otras `app.use(...)`)
 app.use("/docentes", require("./routes/docentes.routes"));
+
+
 app.use("/api/logistica", require("./routes/logistica.routes"));
 app.use("/api/contabilidad", require("./routes/contabilidad.routes"));
-app.use("/api/compras", comprasRoutes);
+
+
+
+
+
+
+app.use("/api/compras", require("./routes/compras.routes"));
+
 app.use("/api/categorias", require("./routes/categorias.routes"));
 app.use("/api/atributos", require("./routes/atributos.routes"));
+
+
+
+
+app.use("/api/compras", comprasRoutes);
 app.use("/api", catalogosRoutes);
 
-// =======================
+
+
+
+
 // RUTA BASE
-// =======================
 app.get("/", (req, res) => {
-    res.json({ ok: true, msg: "🚀 Backend RPC INVENTARIOS ACTIVO" });
+  res.json({ ok: true, msg: "Backend Universidad Quantum activo" });
 });
 
-// =======================
-// PUERTO HOSTINGER
-// =======================
-const PORT = process.env.PORT || 8080;
+// Puerto
+const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`🚀 Backend escuchando en puerto ${PORT}`));
