@@ -30,36 +30,14 @@ console.log("FRONT_URL usando:", process.env.FRONT_URL);
 
 
 // CORS
-const allowedOrigins = [
-  "https://rpcinventario.gruecolimp.com",
-  "http://localhost:5173"
-];
-
 app.use(cors({
-  origin: function(origin, callback) {
-    // Permite requests sin origin (Postman, navegador de localhost)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      console.log("❌ CORS bloqueado para:", origin);
-      return callback(new Error("Not allowed by CORS"), false);
-    }
-  },
+  origin: true,
   credentials: true,
-  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"]
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// Manejar preflight requests correctamente
-app.options("*", cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"]
-}));
-
+app.options("*", cors());
 
 
 
