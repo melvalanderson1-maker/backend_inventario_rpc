@@ -71,6 +71,24 @@
 
 
 
+const nowMysql = () => {
+  const d = new Date();
+  const pad = n => n.toString().padStart(2, "0");
+  return (
+    d.getFullYear() +
+    "-" +
+    pad(d.getMonth() + 1) +
+    "-" +
+    pad(d.getDate()) +
+    " " +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes()) +
+    ":" +
+    pad(d.getSeconds())
+  );
+};
+
 
  
 
@@ -1010,6 +1028,9 @@ listarMarcas: async (req, res) => {
 
 
 
+
+
+
 crearMovimientoEntrada: async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -1061,6 +1082,8 @@ crearMovimientoEntrada: async (req, res) => {
       throw new Error("Datos obligatorios incompletos");
     }
 
+    const fechaCreacion = nowMysql(); // 🔥 HORA REAL DE NODE
+
  
 
     await conn.query(
@@ -1078,8 +1101,9 @@ crearMovimientoEntrada: async (req, res) => {
         estado,
         usuario_creador_id,
         requiere_logistica,
-        requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        requiere_contabilidad,
+        fecha_creacion
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1094,7 +1118,8 @@ crearMovimientoEntrada: async (req, res) => {
         "PENDIENTE_LOGISTICA",
         usuarioId,
         1,
-        1
+        1,
+        fechaCreacion
       ]
     );
 
@@ -1162,7 +1187,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
     cantidad = Number(cantidad);
     if (cantidad <= 0) throw new Error("Cantidad inválida");
 
-    
+    const fechaCreacion = nowMysql(); // 🔥
 
     const [resMov] = await conn.query(
       `INSERT INTO movimientos_inventario (
@@ -1178,8 +1203,9 @@ crearMovimientoSaldoInicial: async (req, res) => {
         estado,
         usuario_creador_id,
         requiere_logistica,
-        requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        requiere_contabilidad,
+        fecha_creacion
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1193,7 +1219,9 @@ crearMovimientoSaldoInicial: async (req, res) => {
         "VALIDADO_LOGISTICA",
         usuarioId,
         0,
-        0
+        0,
+        fechaCreacion
+
       ]
     );
 
@@ -1283,6 +1311,8 @@ crearMovimientoSalida: async (req, res) => {
 
     
 
+    const fechaCreacion = nowMysql(); // 🔥
+
     await conn.query(
       `INSERT INTO movimientos_inventario (
         producto_id,
@@ -1298,8 +1328,9 @@ crearMovimientoSalida: async (req, res) => {
         estado,
         usuario_creador_id,
         requiere_logistica,
-        requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        requiere_contabilidad,
+        fecha_creacion
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1314,7 +1345,9 @@ crearMovimientoSalida: async (req, res) => {
         "PENDIENTE_LOGISTICA",
         usuarioId,
         1,
-        1
+        1,
+        fechaCreacion
+
       ]
     );
 
