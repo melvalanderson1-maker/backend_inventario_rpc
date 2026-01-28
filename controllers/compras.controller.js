@@ -1119,7 +1119,7 @@ crearMovimientoEntrada: async (req, res) => {
         usuarioId,
         1,
         1,
-        fechaCreacion
+        nowMysql()
       ]
     );
 
