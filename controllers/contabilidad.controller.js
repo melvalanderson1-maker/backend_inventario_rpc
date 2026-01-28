@@ -463,12 +463,13 @@ validarMovimiento: async (req, res) => {
 
 rechazarMovimientoContabilidad: async (req, res) => {
   try {
-    console.log("🧪 BODY:", req.body); // DEBUG
+    console.log("🧪 BODY:", req.body);
+
     const { movimientoId } = req.params;
     const { observaciones } = req.body;
     const usuarioId = req.user.id;
 
-    if (!observaciones || !observaciones.trim()) {
+    if (!observaciones?.trim()) {
       return res.status(400).json({ error: "Debe ingresar observaciones del rechazo" });
     }
 
@@ -481,13 +482,14 @@ rechazarMovimientoContabilidad: async (req, res) => {
         fecha_validacion_contabilidad = NOW(),
         motivo_contabilidad = ?
       WHERE id = ?
-        AND estado = 'VALIDADO_LOGISTICA'
       `,
-      [usuarioId, observaciones, movimientoId]
+      [usuarioId, observaciones.trim(), movimientoId]
     );
 
+    console.log("🧪 affectedRows:", result.affectedRows);
+
     if (!result.affectedRows) {
-      return res.status(400).json({ error: "Movimiento no válido para rechazar" });
+      return res.status(404).json({ error: "Movimiento no encontrado" });
     }
 
     await pool.query(
@@ -496,7 +498,7 @@ rechazarMovimientoContabilidad: async (req, res) => {
       (movimiento_id, rol, usuario_id, accion, observaciones)
       VALUES (?, 'CONTABILIDAD', ?, 'RECHAZADO', ?)
       `,
-      [movimientoId, usuarioId, observaciones]
+      [movimientoId, usuarioId, observaciones.trim()]
     );
 
     res.json({ ok: true });
@@ -505,8 +507,6 @@ rechazarMovimientoContabilidad: async (req, res) => {
     res.status(500).json({ error: "Error rechazando movimiento" });
   }
 },
-
-
 
 
 
