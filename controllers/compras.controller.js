@@ -90,6 +90,7 @@ const nowMysql = () => {
 };
 
 
+
  
 
 
@@ -1102,8 +1103,10 @@ crearMovimientoEntrada: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad,
-        fecha_creacion
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        fecha_creacion,
+        created_at,
+        updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1119,7 +1122,9 @@ crearMovimientoEntrada: async (req, res) => {
         usuarioId,
         1,
         1,
-        nowMysql()
+        fecha,
+        fecha,
+        fecha
       ]
     );
 
@@ -1204,8 +1209,10 @@ crearMovimientoSaldoInicial: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad,
-        fecha_creacion
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        fecha_creacion,
+        created_at,
+        updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1220,7 +1227,9 @@ crearMovimientoSaldoInicial: async (req, res) => {
         usuarioId,
         0,
         0,
-        fechaCreacion
+        fecha,
+        fecha,
+        fecha
 
       ]
     );
@@ -1329,8 +1338,10 @@ crearMovimientoSalida: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad,
-        fecha_creacion
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        fecha_creacion,
+        created_at,
+        updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1346,7 +1357,9 @@ crearMovimientoSalida: async (req, res) => {
         usuarioId,
         1,
         1,
-        fechaCreacion
+        fecha,
+        fecha,
+        fecha
 
       ]
     );
