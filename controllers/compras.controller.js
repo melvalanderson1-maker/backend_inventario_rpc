@@ -787,6 +787,7 @@ editarMovimientoCompras: async (req, res) => {
            almacen_id = ?,
            fabricante_id = ?,
            cantidad = ?,
+           cantidad_solicitada = ?, -- 👈 NUEVO
            precio = ?,
            motivo_id = ?,
            op_vinculada = ?,
@@ -798,6 +799,7 @@ editarMovimientoCompras: async (req, res) => {
         almacen_id,
         fabricante_id || null,
         cantidad,
+        cantidad, // 👈 NUEVO
         precio,
         motivo_id || null,
         opFinal,
@@ -1068,6 +1070,7 @@ crearMovimientoEntrada: async (req, res) => {
         fabricante_id,
         tipo_movimiento,
         cantidad,
+        cantidad_solicitada,
         precio,
         op_vinculada,
         motivo_id,
@@ -1076,7 +1079,7 @@ crearMovimientoEntrada: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1084,6 +1087,7 @@ crearMovimientoEntrada: async (req, res) => {
         fabricante_id || null,
         "entrada",
         Number(cantidad),
+        Number(cantidad), // 👈 NUEVO
         precio ? Number(precio) : null,
         opFinal,
         motivo_id || null,
@@ -1167,6 +1171,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
         fabricante_id,
         tipo_movimiento,
         cantidad,
+        cantidad_solicitada,
         precio,
         motivo_id,
         observaciones,
@@ -1174,7 +1179,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1182,6 +1187,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
         fabricante_id || null,
         "saldo_inicial",
         cantidad,
+        cantidad, // 👈 NUEVO
         precio ? Number(precio) : null,
         motivo_id || null,
         observaciones || null,
@@ -1284,6 +1290,7 @@ crearMovimientoSalida: async (req, res) => {
         fabricante_id,
         tipo_movimiento,
         cantidad,
+        cantidad_solicitada,
         precio,
         op_vinculada,
         motivo_id,
@@ -1292,7 +1299,7 @@ crearMovimientoSalida: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1300,6 +1307,7 @@ crearMovimientoSalida: async (req, res) => {
         fabricante_id || null,
         "salida",
         cantidad,
+        cantidad, // 👈 NUEVO
         precio,
         opFinal,
         motivo_id || null,
