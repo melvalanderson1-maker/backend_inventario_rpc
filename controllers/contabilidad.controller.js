@@ -383,9 +383,6 @@ getUltimaObservacionContabilidad: async (req, res) => {
 },
 
 
-  // =====================================================
-  // ✅ VALIDAR MOVIMIENTO (CORE ERP)
-  // =====================================================
 validarMovimiento: async (req, res) => {
   const conn = await pool.getConnection();
   try {
@@ -393,27 +390,7 @@ validarMovimiento: async (req, res) => {
 
     const { movimientoId } = req.params;
     const usuarioId = req.user.id;
-    const {
-      cantidad_real,
-      almacen_id,
-      almacen_nuevo,
-      fecha_validacion_logistica,
-      numero_orden,
-      op_vinculada,
-      observaciones,
-    } = req.body;
-
-    // ===================================================
-    // 🔐 VALIDACIONES BÁSICAS
-    // ===================================================
-    if (cantidad_real === undefined || cantidad_real === null) {
-      throw new Error("Cantidad real obligatoria");
-    }
-
-    const cantidadReal = Number(cantidad_real);
-    if (isNaN(cantidadReal) || cantidadReal <= 0) {
-      throw new Error("Cantidad inválida");
-    }
+    const { almacen_id, almacen_nuevo } = req.body;
 
     // ===================================================
     // 🔒 BLOQUEAR MOVIMIENTO
@@ -424,232 +401,109 @@ validarMovimiento: async (req, res) => {
     );
 
     if (!mov) throw new Error("Movimiento no encontrado");
-    if (mov.estado !== "PENDIENTE_LOGISTICA") {
+    if (mov.estado !== "VALIDADO_LOGISTICA") {
       throw new Error("Este movimiento ya fue procesado");
     }
 
-    const tipo = mov.tipo_movimiento.toUpperCase();
+    // ===================================================
+    // 🔐 VALIDAR QUE YA TENGA CANTIDAD REAL
+    // ===================================================
+    if (!mov.cantidad_real || mov.cantidad_real <= 0) {
+      throw new Error("Debe guardar cantidad real antes de validar");
+    }
 
     // ===================================================
     // 📦 DETERMINAR ALMACÉN FINAL
     // ===================================================
-    let almacenFinal = null;
+    let almacenFinal = almacen_id || mov.almacen_id || null;
 
-    if (tipo === "SALIDA") {
-      if (!mov.almacen_id) {
-        throw new Error("La salida no tiene almacén origen definido");
-      }
-
-      // ⚠️ Solo bloqueamos si intentan CAMBIARLO, no si lo envían igual
-      if (
-        (almacen_id && String(almacen_id) !== String(mov.almacen_id)) ||
-        almacen_nuevo
-      ) {
-        throw new Error("No se permite modificar el almacén en salidas");
-      }
-
-      almacenFinal = mov.almacen_id;
-    } else {
-      if (almacen_id) {
-        almacenFinal = almacen_id;
-      } else if (almacen_nuevo) {
-        const [r] = await conn.query(
-          `
-          INSERT INTO almacenes (nombre, empresa_id, fabricante_id)
-          VALUES (?, ?, ?)
-          `,
-          [almacen_nuevo.trim(), mov.empresa_id, mov.fabricante_id || null]
-        );
-        almacenFinal = r.insertId;
-      } else if (mov.almacen_id) {
-        almacenFinal = mov.almacen_id;
-      } else {
-        throw new Error("Debe seleccionar o crear un almacén");
-      }
-    }
-
-    // ===================================================
-    // 📦 BLOQUEAR STOCK
-    // ===================================================
-    const [[stockRow]] = await conn.query(
-      `
-      SELECT id, cantidad
-      FROM stock_producto
-      WHERE producto_id = ?
-        AND empresa_id = ?
-        AND almacen_id = ?
-        AND (
-          (? IS NULL AND fabricante_id IS NULL)
-          OR fabricante_id = ?
-        )
-      FOR UPDATE
-      `,
-      [
-        mov.producto_id,
-        mov.empresa_id,
-        almacenFinal,
-        mov.fabricante_id,
-        mov.fabricante_id,
-      ]
-    );
-
-    // ===================================================
-    // 📥 ENTRADA / SALDO INICIAL / AJUSTE
-    // ===================================================
-    if (["ENTRADA", "SALDO_INICIAL", "AJUSTE"].includes(tipo)) {
-      if (stockRow) {
-        await conn.query(
-          `UPDATE stock_producto SET cantidad = cantidad + ? WHERE id = ?`,
-          [cantidadReal, stockRow.id]
-        );
-      } else {
-        await conn.query(
-          `
-          INSERT INTO stock_producto
-          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad)
-          VALUES (?,?,?,?,?)
-          `,
-          [
-            mov.producto_id,
-            mov.empresa_id,
-            almacenFinal,
-            mov.fabricante_id || null,
-            cantidadReal,
-          ]
-        );
-      }
-    }
-
-    // ===================================================
-    // 📤 SALIDA
-    // ===================================================
-    // ===================================================
-    // 📤 SALIDA → SOLO PERMITIR CAMBIAR CANTIDAD
-    // ===================================================
-    if (tipo === "SALIDA") {
-      // Verificar que exista stock en empresa, almacen y fabricante
-      const [[stock]] = await conn.query(
-        `
-        SELECT id, cantidad
-        FROM stock_producto
-        WHERE producto_id = ?
-          AND empresa_id = ?
-          AND almacen_id = ?
-          AND (
-            (? IS NULL AND fabricante_id IS NULL)
-            OR fabricante_id = ?
-          )
-        FOR UPDATE
-        `,
-        [mov.producto_id, mov.empresa_id, mov.almacen_id, mov.fabricante_id, mov.fabricante_id]
+    if (almacen_nuevo) {
+      const [r] = await conn.query(
+        `INSERT INTO almacenes (nombre, empresa_id, fabricante_id) VALUES (?, ?, ?)`,
+        [almacen_nuevo.trim(), mov.empresa_id, mov.fabricante_id || null]
       );
-
-      if (!stock) {
-        throw new Error(
-          "❌ No existe stock para este producto en este almacén, empresa y fabricante."
-        );
-      }
-
-      if (cantidadReal > stock.cantidad) {
-        throw new Error(
-          `❌ Stock insuficiente. Disponible: ${stock.cantidad}. No puede validar esta salida.`
-        );
-      }
-
-      // ⚠️ Restar solo la cantidad real validada
-      await conn.query(
-        `UPDATE stock_producto SET cantidad = cantidad - ? WHERE id = ?`,
-        [cantidadReal, stock.id]
-      );
+      almacenFinal = r.insertId;
     }
 
-
     // ===================================================
-    // 🗓 FECHA LOGÍSTICA
-    // ===================================================
-    const fechaLogistica = fecha_validacion_logistica
-      ? fecha_validacion_logistica
-      : new Date();
-
-
-    // ===================================================
-    // ✅ ACTUALIZAR MOVIMIENTO
+    // ✅ ACTUALIZAR SOLO CAMPOS DE CONTABILIDAD
+    // (NO TOCAMOS op_vinculada, numero_orden, observaciones)
     // ===================================================
     await conn.query(
-      `
-      UPDATE movimientos_inventario
-      SET
-        cantidad_real = ?,
-        cantidad = ?,
-        almacen_id = ?,
-        numero_orden = ?,
-        op_vinculada = ?,
-        estado = 'VALIDADO_LOGISTICA',
-        usuario_logistica_id = ?,
-        fecha_validacion_logistica = CAST(? AS DATETIME)
-
-      WHERE id = ?
-      `,
-      [
-        cantidadReal,
-        cantidadReal,
-        almacenFinal,
-        numero_orden || mov.numero_orden,
-        op_vinculada || mov.op_vinculada,
-        usuarioId,
-        fechaLogistica,
-        movimientoId,
-      ]
+      `UPDATE movimientos_inventario
+       SET estado = 'APROBADO_FINAL',
+           usuario_contabilidad_id = ?,
+           fecha_validacion_contabilidad = NOW(),
+           almacen_id = ?
+       WHERE id = ?`,
+      [usuarioId, almacenFinal, movimientoId]
     );
 
     // ===================================================
-    // 📝 AUDITORÍA LOGÍSTICA
+    // 📝 REGISTRAR AUDITORÍA
     // ===================================================
-    if (observaciones?.trim()) {
-      await conn.query(
-        `
-        INSERT INTO validaciones_movimiento
-        (movimiento_id, rol, usuario_id, accion, observaciones)
-        VALUES (?, 'LOGISTICA', ?, 'VALIDADO', ?)
-        `,
-        [movimientoId, usuarioId, observaciones.trim()]
-      );
-    }
-
-    // ===================================================
-    // 🖼 IMAGEN (OPCIONAL)
-    // ===================================================
-    if (req.file) {
-      const uploaded = await uploadImage(
-        req.file.buffer,
-        `movimientos/${movimientoId}-${Date.now()}`
-      );
-      await conn.query(
-        `
-        INSERT INTO imagenes
-        (movimiento_id, tipo, ruta, storage_key, storage_provider)
-        VALUES (?, 'almacen', ?, ?, ?)
-        `,
-        [
-          movimientoId,
-          uploaded.url,
-          uploaded.storage_key,
-          uploaded.storage_provider,
-        ]
-      );
-    }
+    await conn.query(
+      `INSERT INTO validaciones_movimiento
+       (movimiento_id, rol, usuario_id, accion, observaciones, created_at)
+       VALUES (?, 'CONTABILIDAD', ?, 'VALIDADO', 'Validado por contabilidad', NOW())`,
+      [movimientoId, usuarioId]
+    );
 
     await conn.commit();
     res.json({ ok: true });
   } catch (error) {
     await conn.rollback();
     console.error("❌ validarMovimiento:", error);
-    res.status(400).json({ error: error.message });
+    res.status(500).json({ ok: false, error: error.message });
   } finally {
     conn.release();
   }
 },
 
+
+rechazarMovimientoContabilidad: async (req, res) => {
+  try {
+    const { movimientoId } = req.params;
+    const { observaciones } = req.body;
+    const usuarioId = req.user.id;
+
+    if (!observaciones || !observaciones.trim()) {
+      return res.status(400).json({ error: "Debe ingresar observaciones del rechazo" });
+    }
+
+    const [result] = await pool.query(
+      `
+      UPDATE movimientos_inventario
+      SET
+        estado = 'RECHAZADO_CONTABILIDAD',
+        usuario_contabilidad_id = ?,
+        fecha_validacion_contabilidad = NOW(),
+        observaciones_contabilidad = ?
+      WHERE id = ?
+        AND estado = 'VALIDADO_LOGISTICA'
+    `,
+      [usuarioId, observaciones, movimientoId]
+    );
+
+    if (!result.affectedRows) {
+      return res.status(400).json({ error: "Movimiento no válido para rechazar" });
+    }
+
+    await pool.query(
+      `
+      INSERT INTO validaciones_movimiento
+      (movimiento_id, rol, usuario_id, accion, observaciones)
+      VALUES (?, 'CONTABILIDAD', ?, 'RECHAZADO', ?)
+    `,
+      [movimientoId, usuarioId, observaciones]
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("❌ rechazarMovimientoContabilidad:", error);
+    res.status(500).json({ error: "Error rechazando movimiento" });
+  }
+},
 
 
 
@@ -1724,92 +1578,7 @@ listarAprobadosFinal: async (req, res) => {
   }
 },
 
-// =====================================================
-// ✅ VALIDAR MOVIMIENTO (CONTABILIDAD) — FIX 500 🔥
-// =====================================================
-validarMovimiento: async (req, res) => {
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
 
-    const { movimientoId } = req.params;
-    const usuarioId = req.user.id;
-    const { almacen_id, almacen_nuevo, numero_orden, op_vinculada, observaciones } = req.body;
-
-    // ===================================================
-    // 🔒 BLOQUEAR MOVIMIENTO
-    // ===================================================
-    const [[mov]] = await conn.query(
-      `SELECT * FROM movimientos_inventario WHERE id = ? FOR UPDATE`,
-      [movimientoId]
-    );
-    if (!mov) throw new Error("Movimiento no encontrado");
-    if (mov.estado !== "VALIDADO_LOGISTICA") {
-      throw new Error("Este movimiento ya fue procesado");
-    }
-
-    // ===================================================
-    // 🔐 VALIDAR QUE YA TENGA CANTIDAD REAL
-    // ===================================================
-    if (!mov.cantidad_real || mov.cantidad_real <= 0) {
-      throw new Error("Debe guardar cantidad real antes de validar");
-    }
-
-    // ===================================================
-    // 📦 DETERMINAR ALMACÉN FINAL
-    // ===================================================
-    let almacenFinal = almacen_id || mov.almacen_id || null;
-    if (almacen_nuevo) {
-      const [r] = await conn.query(
-        `INSERT INTO almacenes (nombre, empresa_id, fabricante_id) VALUES (?, ?, ?)`,
-        [almacen_nuevo.trim(), mov.empresa_id, mov.fabricante_id || null]
-      );
-      almacenFinal = r.insertId;
-    }
-
-    // ===================================================
-    // 🔒 ACTUALIZAR MOVIMIENTO
-    // ===================================================
-    await conn.query(
-      `UPDATE movimientos_inventario
-       SET estado='APROBADO_FINAL',
-           usuario_contabilidad_id=?,
-           fecha_validacion_contabilidad=NOW(),
-           almacen_id=?,
-           numero_orden=?,
-           op_vinculada=?,
-           observaciones=?
-       WHERE id=?`,
-      [
-        usuarioId,
-        almacenFinal,
-        numero_orden || null,
-        op_vinculada || null,
-        observaciones || null,
-        movimientoId
-      ]
-    );
-
-    // ===================================================
-    // 📝 REGISTRAR AUDITORÍA
-    // ===================================================
-    await conn.query(
-      `INSERT INTO validaciones_movimiento
-       (movimiento_id, rol, usuario_id, accion, observaciones, created_at)
-       VALUES (?, 'CONTABILIDAD', ?, 'VALIDADO', ?, NOW())`,
-      [movimientoId, usuarioId, observaciones || "Validado por contabilidad"]
-    );
-
-    await conn.commit();
-    res.json({ ok: true });
-  } catch (error) {
-    await conn.rollback();
-    console.error("❌ validarMovimiento:", error);
-    res.status(500).json({ ok: false, error: error.message });
-  } finally {
-    conn.release();
-  }
-},
 
 // =====================================================
 // ❌ RECHAZAR MOVIMIENTO

@@ -136,7 +136,16 @@ router.get(
 //CONTABILIDAD
 // ✅ VALIDAR / RECHAZAR
 router.post("/movimientos/:movimientoId/validar", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.validarMovimiento);
-router.post("/movimientos/:movimientoId/rechazar", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.rechazarMovimiento);
+//router.post("/movimientos/:movimientoId/rechazar", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.rechazarMovimiento);
+router.post(
+  "/movimientos/:movimientoId/rechazar",
+  rolMiddleware("ADMIN_CONTABILIDAD"),
+  ctrl.rechazarMovimientoContabilidad
+);
+
+
+
+
 
 // ✅ DETALLE DE MOVIMIENTO
 router.get("/movimientos/:id/detalle", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.detalleMovimiento);
