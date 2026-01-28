@@ -4,6 +4,7 @@
   const { uploadImage } = require("../services/storage.service");
 
   const { getOrCreate } = require("../utils/getOrCreate");
+  const { getLocalMySQLDateTime } = require("../utils/date");
 
   
 
@@ -1060,7 +1061,7 @@ crearMovimientoEntrada: async (req, res) => {
       throw new Error("Datos obligatorios incompletos");
     }
 
-    const fecha = new Date();
+    const fecha = getLocalMySQLDateTime();
 
     await conn.query(
       `INSERT INTO movimientos_inventario (
@@ -1163,7 +1164,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
     cantidad = Number(cantidad);
     if (cantidad <= 0) throw new Error("Cantidad inválida");
 
-    const fecha = new Date();
+    const fecha = getLocalMySQLDateTime();
 
     const [resMov] = await conn.query(
       `INSERT INTO movimientos_inventario (
@@ -1284,7 +1285,7 @@ crearMovimientoSalida: async (req, res) => {
       precio = null;
     }
 
-    const fecha = new Date();
+    const fecha = getLocalMySQLDateTime();
 
     await conn.query(
       `INSERT INTO movimientos_inventario (
