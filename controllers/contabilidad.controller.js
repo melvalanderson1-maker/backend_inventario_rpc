@@ -680,7 +680,7 @@ listarMovimientosPorProducto: async (req, res) => {
         mi.precio,
         mi.estado,
         mi.created_at AS fecha_creacion,
-        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m-%d %H:%i:%s') AS fecha_validacion_logistica,
+        mi.fecha_validacion_logistica,
 
         p.codigo AS codigo_producto,
         p.codigo_modelo,
