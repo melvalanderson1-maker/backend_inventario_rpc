@@ -510,6 +510,7 @@ rechazarMovimientoContabilidad: async (req, res) => {
 
 
 
+
 listarAlmacenesPorProducto: async (req, res) => {
   try {
     const { productoId, empresaId, fabricanteId, almacenSolicitadoId } = req.query;
@@ -1635,7 +1636,7 @@ detalleMovimiento: async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1️⃣ Datos principales
+    // 1️⃣ Movimiento principal
     const [movs] = await pool.query(
       `SELECT 
          m.*,
@@ -1659,7 +1660,7 @@ detalleMovimiento: async (req, res) => {
 
     const movimiento = movs[0];
 
-    // 2️⃣ Validaciones
+    // 2️⃣ Historial de validaciones
     const [validaciones] = await pool.query(
       `SELECT 
          v.*, 
@@ -1667,7 +1668,7 @@ detalleMovimiento: async (req, res) => {
        FROM validaciones_movimiento v
        LEFT JOIN usuarios u ON u.id = v.usuario_id
        WHERE v.movimiento_id = ?
-       ORDER BY created_at ASC`,
+       ORDER BY v.created_at ASC`,
       [id]
     );
 
@@ -1680,7 +1681,15 @@ detalleMovimiento: async (req, res) => {
     const observacion_logistica = logistica.observaciones || null;
     const observacion_contabilidad = contabilidad.observaciones || null;
 
-    // 3️⃣ Imágenes
+    // 3️⃣ Último rechazo real (sea logística o contabilidad)
+    const rechazoFinal = [...validaciones]
+      .filter(v => v.accion === "RECHAZADO")
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+
+    const motivo_rechazo = rechazoFinal?.observaciones || null;
+    const rechazo_por = rechazoFinal?.rol || null;
+
+    // 4️⃣ Imágenes
     const [imagenes] = await pool.query(
       `SELECT * FROM imagenes WHERE movimiento_id = ?`,
       [id]
@@ -1692,14 +1701,17 @@ detalleMovimiento: async (req, res) => {
       usuario_contabilidad,
       observacion_logistica,
       observacion_contabilidad,
+      motivo_rechazo,
+      rechazo_por,
       validaciones,
-      imagenes
+      imagenes,
     });
   } catch (error) {
     console.error("❌ detalleMovimiento:", error);
     res.status(500).json({ ok: false, error: error.message });
   }
 },
+
 
 // =====================================================
 // 💾 GUARDAR CANTIDAD REAL
