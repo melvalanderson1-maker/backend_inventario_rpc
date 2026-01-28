@@ -565,9 +565,8 @@ validarMovimiento: async (req, res) => {
     // ===================================================
     // 🗓 FECHA LOGÍSTICA
     // ===================================================
-    const fechaLogistica = fecha_validacion_logistica
-      ? fecha_validacion_logistica
-      : new Date();
+    const fechaLogistica = new Date(); // UTC real del servidor
+
 
 
     // ===================================================
@@ -584,7 +583,7 @@ validarMovimiento: async (req, res) => {
         op_vinculada = ?,
         estado = 'VALIDADO_LOGISTICA',
         usuario_logistica_id = ?,
-        fecha_validacion_logistica = CAST(? AS DATETIME)
+        fecha_validacion_logistica = ?
 
       WHERE id = ?
       `,
