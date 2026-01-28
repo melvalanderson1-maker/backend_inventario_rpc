@@ -1870,6 +1870,7 @@ detalleMovimiento: async (req, res) => {
     const [movs] = await pool.query(
       `SELECT 
          m.*,
+         DATE_FORMAT(m.fecha_validacion_logistica, '%Y-%m-%d %H:%i:%s') AS fecha_validacion_logistica,
          u.nombre AS usuario_creador,
          p.descripcion AS producto,
          e.nombre AS empresa,
