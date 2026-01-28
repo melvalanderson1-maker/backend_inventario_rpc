@@ -4,6 +4,26 @@ const { uploadImage } = require("../services/storage.service");
 let pool;
 (async () => (pool = await initDB()))();
 
+
+const nowMysql = () => {
+  const d = new Date();
+  const pad = n => n.toString().padStart(2, "0");
+  return (
+    d.getFullYear() +
+    "-" +
+    pad(d.getMonth() + 1) +
+    "-" +
+    pad(d.getDate()) +
+    " " +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes()) +
+    ":" +
+    pad(d.getSeconds())
+  );
+};
+
+
 module.exports = {
   // =====================================================
   // 📦 LISTAR PRODUCTOS
@@ -565,9 +585,8 @@ validarMovimiento: async (req, res) => {
     // ===================================================
     // 🗓 FECHA LOGÍSTICA
     // ===================================================
-    const fechaLogistica = fecha_validacion_logistica
-      ? fecha_validacion_logistica
-      : new Date();
+    const fechaLogistica = nowMysql();
+
 
 
     // ===================================================
@@ -584,7 +603,8 @@ validarMovimiento: async (req, res) => {
         op_vinculada = ?,
         estado = 'VALIDADO_LOGISTICA',
         usuario_logistica_id = ?,
-        fecha_validacion_logistica = CAST(? AS DATETIME)
+        fecha_validacion_logistica = ?
+
 
       WHERE id = ?
       `,
