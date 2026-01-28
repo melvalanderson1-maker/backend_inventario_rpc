@@ -478,10 +478,10 @@ rechazarMovimientoContabilidad: async (req, res) => {
         estado = 'RECHAZADO_CONTABILIDAD',
         usuario_contabilidad_id = ?,
         fecha_validacion_contabilidad = NOW(),
-        observaciones_contabilidad = ?
+        motivo_contabilidad = ?
       WHERE id = ?
         AND estado = 'VALIDADO_LOGISTICA'
-    `,
+      `,
       [usuarioId, observaciones, movimientoId]
     );
 
@@ -494,7 +494,7 @@ rechazarMovimientoContabilidad: async (req, res) => {
       INSERT INTO validaciones_movimiento
       (movimiento_id, rol, usuario_id, accion, observaciones)
       VALUES (?, 'CONTABILIDAD', ?, 'RECHAZADO', ?)
-    `,
+      `,
       [movimientoId, usuarioId, observaciones]
     );
 
@@ -504,6 +504,7 @@ rechazarMovimientoContabilidad: async (req, res) => {
     res.status(500).json({ error: "Error rechazando movimiento" });
   }
 },
+
 
 
 
