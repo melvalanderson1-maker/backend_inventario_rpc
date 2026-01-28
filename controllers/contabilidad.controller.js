@@ -463,6 +463,7 @@ validarMovimiento: async (req, res) => {
 
 rechazarMovimientoContabilidad: async (req, res) => {
   try {
+    console.log("🧪 BODY:", req.body); // DEBUG
     const { movimientoId } = req.params;
     const { observaciones } = req.body;
     const usuarioId = req.user.id;
