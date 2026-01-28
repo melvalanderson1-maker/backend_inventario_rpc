@@ -26,7 +26,8 @@ async function initDB() {
       database: DB_NAME,
       port: DB_PORT || 3306,
       waitForConnections: true,
-      connectionLimit: 10
+      connectionLimit: 10,
+      timezone: "-05:00"
     });
 
     // Probar conexión
