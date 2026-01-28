@@ -1637,7 +1637,6 @@ detalleMovimiento: async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1️⃣ Movimiento principal
     const [movs] = await pool.query(
       `SELECT 
          m.*,
@@ -1656,12 +1655,12 @@ detalleMovimiento: async (req, res) => {
       [id]
     );
 
-    if (!movs[0])
+    if (!movs[0]) {
       return res.status(404).json({ ok: false, msg: "Movimiento no encontrado" });
+    }
 
     const movimiento = movs[0];
 
-    // 2️⃣ Historial de validaciones
     const [validaciones] = await pool.query(
       `SELECT 
          v.*, 
@@ -1676,42 +1675,21 @@ detalleMovimiento: async (req, res) => {
     const logistica = validaciones.find(v => v.rol === "LOGISTICA") || {};
     const contabilidad = validaciones.find(v => v.rol === "CONTABILIDAD") || {};
 
-    const usuario_logistica = logistica.usuario || null;
-    const usuario_contabilidad = contabilidad.usuario || null;
-
-    const observacion_logistica = logistica.observaciones || null;
-    const observacion_contabilidad = contabilidad.observaciones || null;
-
-    // 3️⃣ Último rechazo real (sea logística o contabilidad)
-    const rechazoFinal = [...validaciones]
-      .filter(v => v.accion === "RECHAZADO")
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
-
-    const motivo_rechazo = rechazoFinal?.observaciones || null;
-    const rechazo_por = rechazoFinal?.rol || null;
-
-    // 4️⃣ Imágenes
-    const [imagenes] = await pool.query(
-      `SELECT * FROM imagenes WHERE movimiento_id = ?`,
-      [id]
-    );
-
     res.json({
       ...movimiento,
-      usuario_logistica,
-      usuario_contabilidad,
-      observacion_logistica,
-      observacion_contabilidad,
-      motivo_rechazo,
-      rechazo_por,
+      usuario_logistica: logistica.usuario || null,
+      usuario_contabilidad: contabilidad.usuario || null,
+      observacion_logistica: logistica.observaciones || null,
+      observacion_contabilidad: contabilidad.observaciones || null,
+      motivo_contabilidad: movimiento.motivo_contabilidad || null, // 🔥 CLAVE
       validaciones,
-      imagenes,
     });
   } catch (error) {
     console.error("❌ detalleMovimiento:", error);
     res.status(500).json({ ok: false, error: error.message });
   }
 },
+
 
 
 // =====================================================
