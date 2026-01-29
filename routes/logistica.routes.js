@@ -41,11 +41,6 @@ router.get(
 );
 
 
-router.get(
-  "/cambios-almacen/todos-pendientes",
-  rolMiddleware("ADMIN_LOGISTICA"),
-  ctrl.listarCambiosAlmacenTodosPendientes
-);
 
 
 
