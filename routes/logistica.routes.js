@@ -33,12 +33,21 @@ router.post(
   ctrl.rechazarMovimiento
 );
 
+//PARA TODOSS
 
 router.get(
   "/movimientos/todos",
   rolMiddleware("ADMIN_LOGISTICA"),
   ctrl.listarMovimientosTodos
 );
+
+
+
+
+router.get("/movimientos/:id/detalle", rolMiddleware("ADMIN_LOGISTICA"), ctrl.detalleMovimiento);
+
+router.get("/movimientos/:id/ultima-observacion", ctrl.getUltimaObservacionLogistica);
+
 
 // Ruta para listar todos los cambios de almacén
 router.get(

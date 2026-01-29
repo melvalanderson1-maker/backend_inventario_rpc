@@ -837,6 +837,100 @@ listarMovimientosTodos: async (req, res) => {
 },
 
 
+
+
+
+
+
+detalleMovimiento: async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [movs] = await pool.query(
+      `SELECT 
+         m.*,
+         u.nombre AS usuario_creador,
+         p.descripcion AS producto,
+         e.nombre AS empresa,
+         a.nombre AS almacen,
+         f.nombre AS fabricante
+       FROM movimientos_inventario m
+       LEFT JOIN usuarios u ON u.id = m.usuario_creador_id
+       LEFT JOIN productos p ON p.id = m.producto_id
+       LEFT JOIN empresas e ON e.id = m.empresa_id
+       LEFT JOIN almacenes a ON a.id = m.almacen_id
+       LEFT JOIN fabricantes f ON f.id = m.fabricante_id
+       WHERE m.id = ?`,
+      [id]
+    );
+
+    if (!movs[0]) {
+      return res.status(404).json({ ok: false, msg: "Movimiento no encontrado" });
+    }
+
+    const movimiento = movs[0];
+
+    const [validaciones] = await pool.query(
+      `SELECT 
+         v.*, 
+         u.nombre AS usuario
+       FROM validaciones_movimiento v
+       LEFT JOIN usuarios u ON u.id = v.usuario_id
+       WHERE v.movimiento_id = ?
+       ORDER BY v.created_at ASC`,
+      [id]
+    );
+
+    const logistica = validaciones.find(v => v.rol === "LOGISTICA") || {};
+    const contabilidad = validaciones.find(v => v.rol === "CONTABILIDAD") || {};
+
+    res.json({
+      ...movimiento,
+      usuario_logistica: logistica.usuario || null,
+      usuario_contabilidad: contabilidad.usuario || null,
+      observacion_logistica: logistica.observaciones || null,
+      observacion_contabilidad: contabilidad.observaciones || null,
+      motivo_contabilidad: movimiento.motivo_contabilidad || null, // 🔥 CLAVE
+      validaciones,
+    });
+  } catch (error) {
+    console.error("❌ detalleMovimiento:", error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+},
+
+
+
+
+
+
+
+
+getUltimaObservacionLogistica: async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [[row]] = await pool.query(
+      `
+      SELECT observaciones
+      FROM validaciones_movimiento
+      WHERE movimiento_id = ?
+        AND rol = 'LOGISTICA'
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    res.json({ observaciones: row?.observaciones || "" });
+  } catch (error) {
+    console.error("❌ getUltimaObservacionLogistica:", error);
+    res.status(500).json({ error: "Error obteniendo observación logística" });
+  }
+},
+
+
+
 // ✅ Listar todos los cambios de almacén
   listarCambiosAlmacenTodos: async (req, res) => {
     try {
