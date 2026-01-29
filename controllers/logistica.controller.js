@@ -1154,7 +1154,6 @@ rechazarMovimiento: async (req, res) => {
 listarMovimientosPorProducto: async (req, res) => {
   try {
     const { productoId, estados } = req.query;
-
     const estadosArr = estados ? estados.split(",") : [];
 
     let sql = `
@@ -1173,9 +1172,9 @@ listarMovimientosPorProducto: async (req, res) => {
         mi.created_at AS fecha_creacion,
         mi.fecha_validacion_logistica,
 
-        p.codigo AS codigo_producto,
+        p.codigo AS producto_codigo,
         p.codigo_modelo,
-        p.descripcion AS producto,
+        p.descripcion AS producto_descripcion,
         e.nombre AS empresa,
         a.nombre AS almacen,
         f.nombre AS fabricante,
@@ -1202,7 +1201,6 @@ listarMovimientosPorProducto: async (req, res) => {
           LIMIT 1
         ) AS usuario_logistica
 
-
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
       INNER JOIN empresas e ON e.id = mi.empresa_id
@@ -1228,6 +1226,7 @@ listarMovimientosPorProducto: async (req, res) => {
     res.status(500).json({ error: "Error obteniendo movimientos" });
   }
 },
+
 
 
 
