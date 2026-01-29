@@ -1,4 +1,3 @@
-// backend/config/db.js
 const mysql = require("mysql2/promise");
 
 let pool;
@@ -15,32 +14,30 @@ async function initDB() {
   } = process.env;
 
   if (!DB_HOST || !DB_USER || !DB_NAME) {
-    throw new Error("❌ Variables de entorno DB_* no definidas en .env");
+    throw new Error("❌ Variables de entorno DB_* no definidas");
   }
 
+  pool = mysql.createPool({
+    host: DB_HOST,
+    user: DB_USER,
+    password: DB_PASSWORD,
+    database: DB_NAME,
+    port: DB_PORT || 3306,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+  });
+
+  // Test conexión SIN matar proceso
   try {
-    pool = mysql.createPool({
-      host: DB_HOST,
-      user: DB_USER,
-      password: DB_PASSWORD,
-      database: DB_NAME,
-      port: DB_PORT || 3306,
-      waitForConnections: true,
-      connectionLimit: 10,
-      
-    });
-
-    // Probar conexión
     const conn = await pool.getConnection();
-    console.log(`✅ Conectado a MySQL → Base: ${DB_NAME}`);
+    console.log(`✅ MySQL conectado → ${DB_NAME}`);
     conn.release();
-
-    return pool;
-
   } catch (err) {
-    console.error("❌ Error conectando a MySQL:", err.message);
-    process.exit(1);
+    console.error("🔥 MySQL NO disponible:", err.message);
   }
+
+  return pool;
 }
 
 module.exports = { initDB };
