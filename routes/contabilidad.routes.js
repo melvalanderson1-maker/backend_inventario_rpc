@@ -141,6 +141,23 @@ router.post(
 
 
 
+//MENU MOVIMINETOS PARA TABLAS GENERALES
+
+router.get(
+  "/movimientos/todos",
+  rolMiddleware("ADMIN_CONTABILIDAD"),
+  ctrl.listarMovimientosTodosContabilidad
+);
+
+// Ruta para listar todos los cambios de almacén
+router.get(
+  "/cambios-almacen/todos",
+  rolMiddleware("ADMIN_CONTABILIDAD"), // Solo usuarios con este rol
+  ctrl.listarCambiosAlmacenTodosContabilidad
+);
+
+
+
 
 
 // ✅ DETALLE DE MOVIMIENTO
