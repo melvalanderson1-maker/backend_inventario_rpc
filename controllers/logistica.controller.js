@@ -1502,7 +1502,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
 
   // =====================================================
   // 📋 LISTAR CAMBIOS DE ALMACÉN PENDIENTES
-listarCambiosAlmacenPendientes: async (req, res) => {
+listarCambiosAlmacenTodosPendientes: async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
@@ -1516,7 +1516,7 @@ listarCambiosAlmacenPendientes: async (req, res) => {
         ad.nombre AS almacen_destino,
         f.nombre AS fabricante_origen,
         fd.nombre AS fabricante_destino,
-        
+
         -- ✅ Stock disponible en ORIGEN
         COALESCE(s_origen.cantidad, 0) AS cantidad_disponible,
 
@@ -1526,27 +1526,29 @@ listarCambiosAlmacenPendientes: async (req, res) => {
       INNER JOIN productos p ON p.id = ca.producto_id
       INNER JOIN empresas eo ON eo.id = ca.empresa_origen_id
       INNER JOIN almacenes ao ON ao.id = ca.almacen_origen_id
-      LEFT JOIN empresas ed ON ed.id = ca.empresa_id
+      LEFT JOIN empresas ed ON ed.id = ca.empresa_destino_id
       LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
       LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
-      LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_id
+      LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_destino_id
 
       -- ✅ JOIN con stock ORIGEN
       LEFT JOIN stock_producto s_origen
         ON s_origen.producto_id = ca.producto_id
         AND s_origen.empresa_id = ca.empresa_origen_id
         AND s_origen.almacen_id = ca.almacen_origen_id
-        AND s_origen.fabricante_id = ca.fabricante_origen_id
+        AND (s_origen.fabricante_id <=> ca.fabricante_origen_id)
 
       INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
+
+      -- ✅ Solo pendientes
       WHERE ca.estado IN ('PENDIENTE_SALIDA','PENDIENTE_INGRESO')
       ORDER BY ca.created_at ASC
     `);
 
     res.json(rows);
   } catch (error) {
-    console.error("❌ listarCambiosAlmacenPendientes:", error);
-    res.status(500).json({ error: "Error listando cambios de almacén" });
+    console.error("❌ listarCambiosAlmacenTodosPendientes:", error);
+    res.status(500).json({ error: "Error listando cambios pendientes de todos los productos" });
   }
 },
 
