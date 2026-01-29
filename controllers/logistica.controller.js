@@ -754,6 +754,90 @@ validarStockDisponible: async (req, res) => {
 },
 
 
+
+
+//LISTAR TODO COMPLETO PARA  LOGISTICA
+// =====================================================
+// 📋 LISTAR TODOS LOS MOVIMIENTOS (GLOBAL)
+// =====================================================
+listarMovimientosTodos: async (req, res) => {
+  try {
+    const { estados } = req.query;
+    const estadosArr = estados ? estados.split(",") : [];
+
+    let sql = `
+      SELECT
+        mi.id,
+        mi.producto_id,
+        mi.empresa_id,
+        mi.fabricante_id,
+        mi.almacen_id,
+        mi.tipo_movimiento,
+        mi.op_vinculada,
+        mi.cantidad,
+        mi.cantidad_solicitada,
+        mi.precio,
+        mi.estado,
+        mi.created_at AS fecha_creacion,
+        mi.fecha_validacion_logistica,
+
+        p.codigo AS producto_codigo,
+        p.codigo_modelo,
+        p.descripcion AS producto_descripcion,
+        e.nombre AS empresa,
+        a.nombre AS almacen,
+        f.nombre AS fabricante,
+
+        mi.observaciones AS observaciones_compras,
+
+        (
+          SELECT CONCAT(IFNULL(mrm.nombre, ''), ' - ', IFNULL(vm.observaciones, ''))
+          FROM validaciones_movimiento vm
+          LEFT JOIN motivos_rechazo_movimiento mrm
+            ON mrm.id = mi.motivo_id
+          WHERE vm.movimiento_id = mi.id
+            AND vm.rol = 'LOGISTICA'
+          ORDER BY vm.created_at DESC
+          LIMIT 1
+        ) AS motivo_rechazo,
+        (
+          SELECT u.nombre
+          FROM validaciones_movimiento vm
+          INNER JOIN usuarios u ON u.id = vm.usuario_id
+          WHERE vm.movimiento_id = mi.id
+            AND vm.rol = 'LOGISTICA'
+          ORDER BY vm.created_at DESC
+          LIMIT 1
+        ) AS usuario_logistica
+
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
+      INNER JOIN empresas e ON e.id = mi.empresa_id
+      LEFT JOIN almacenes a ON a.id = mi.almacen_id
+      LEFT JOIN fabricantes f ON f.id = mi.fabricante_id
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    if (estadosArr.length) {
+      sql += ` AND mi.estado IN (${estadosArr.map(() => "?").join(",")})`;
+      params.push(...estadosArr);
+    }
+
+    sql += " ORDER BY mi.created_at DESC";
+
+    const [rows] = await pool.query(sql, params);
+    console.log("🧪 MOVIMIENTOS GLOBAL SAMPLE:", rows[0]);
+    res.json(rows);
+  } catch (error) {
+    console.error("❌ listarMovimientosTodos:", error);
+    res.status(500).json({ error: "Error obteniendo movimientos" });
+  }
+},
+
+
+
   // =====================================================
   // 📋 LISTAR MOTIVOS DE RECHAZO
   // =====================================================

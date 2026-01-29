@@ -34,6 +34,14 @@ router.post(
 );
 
 
+router.get(
+  "/movimientos/todos",
+  rolMiddleware("ADMIN_LOGISTICA"),
+  ctrl.listarMovimientosTodos
+);
+
+
+
 // =====================
 // Cambios de almacén 🔥
 // =====================
