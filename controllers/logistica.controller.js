@@ -845,31 +845,18 @@ listarCambiosAlmacenTodos: async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
-        ca.id,
-        ca.producto_id,
-        ca.empresa_origen_id,
-        ca.almacen_origen_id,
-        ca.fabricante_origen_id,
-        ca.empresa_destino_id,
-        ca.almacen_destino_id,
-        ca.fabricante_destino_id,
-        ca.cantidad,
-        ca.estado,
-        ca.created_at,
-
+        ca.*,
         p.codigo AS codigo_producto,
         p.codigo_modelo,
         p.descripcion AS producto,
-
         eo.nombre AS empresa_origen,
         ao.nombre AS almacen_origen,
-        fo.nombre AS fabricante_origen,
-
         ed.nombre AS empresa_destino,
         ad.nombre AS almacen_destino,
+        f.nombre AS fabricante_origen,
         fd.nombre AS fabricante_destino,
-
-        -- ✅ Stock disponible real en origen
+        
+        -- ✅ Stock disponible en ORIGEN
         COALESCE(s_origen.cantidad, 0) AS cantidad_disponible,
 
         u.nombre AS usuario_logistica
@@ -878,33 +865,32 @@ listarCambiosAlmacenTodos: async (req, res) => {
       INNER JOIN productos p ON p.id = ca.producto_id
       INNER JOIN empresas eo ON eo.id = ca.empresa_origen_id
       INNER JOIN almacenes ao ON ao.id = ca.almacen_origen_id
-      LEFT JOIN fabricantes fo ON fo.id = ca.fabricante_origen_id
-
       LEFT JOIN empresas ed ON ed.id = ca.empresa_destino_id
       LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
+      LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
       LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_destino_id
 
+      -- ✅ JOIN con stock ORIGEN (null-safe)
       LEFT JOIN stock_producto s_origen
         ON s_origen.producto_id = ca.producto_id
         AND s_origen.empresa_id = ca.empresa_origen_id
         AND s_origen.almacen_id = ca.almacen_origen_id
-        AND (
-          (s_origen.fabricante_id IS NULL AND ca.fabricante_origen_id IS NULL)
-          OR s_origen.fabricante_id = ca.fabricante_origen_id
-        )
+        AND (s_origen.fabricante_id <=> ca.fabricante_origen_id)
 
       INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
 
-      WHERE ca.estado IN ('PENDIENTE_SALIDA','PENDIENTE_INGRESO')
+      -- ✅ Traer todos los movimientos de TODOS los productos
+      WHERE ca.estado IN ('PENDIENTE_SALIDA', 'PENDIENTE_INGRESO')
       ORDER BY ca.created_at ASC
     `);
 
     res.json(rows);
   } catch (error) {
     console.error("❌ listarCambiosAlmacenTodos:", error);
-    res.status(500).json({ error: "Error listando cambios de almacén" });
+    res.status(500).json({ error: error.message });
   }
 },
+
 
 
 
