@@ -841,7 +841,7 @@ listarMovimientosTodos: async (req, res) => {
 // 📦 CAMBIOS DE ALMACÉN - TODOS (NO SOLO PENDIENTES)
 // =====================================================
 
-listarCambiosAlmacenTodos: async (req, res) => {
+listarCambiosAlmacenTodosPendientes: async (req, res) => {
   try {
     const [rows] = await pool.query(`
       SELECT
@@ -870,7 +870,7 @@ listarCambiosAlmacenTodos: async (req, res) => {
       LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
       LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_destino_id
 
-      -- ✅ JOIN con stock ORIGEN (null-safe)
+      -- ✅ Stock ORIGEN null-safe
       LEFT JOIN stock_producto s_origen
         ON s_origen.producto_id = ca.producto_id
         AND s_origen.empresa_id = ca.empresa_origen_id
@@ -879,15 +879,15 @@ listarCambiosAlmacenTodos: async (req, res) => {
 
       INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
 
-      -- ✅ Traer todos los movimientos de TODOS los productos
-      WHERE ca.estado IN ('PENDIENTE_SALIDA', 'PENDIENTE_INGRESO')
+      -- ✅ Solo pendientes
+      WHERE ca.estado IN ('PENDIENTE_SALIDA','PENDIENTE_INGRESO')
       ORDER BY ca.created_at ASC
     `);
 
     res.json(rows);
   } catch (error) {
-    console.error("❌ listarCambiosAlmacenTodos:", error);
-    res.status(500).json({ error: error.message });
+    console.error("❌ listarCambiosAlmacenTodosPendientes:", error);
+    res.status(500).json({ error: "Error listando cambios pendientes de todos los productos" });
   }
 },
 

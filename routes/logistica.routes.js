@@ -42,9 +42,9 @@ router.get(
 
 
 router.get(
-  "/cambios-almacen/todos",
+  "/cambios-almacen/todos-pendientes",
   rolMiddleware("ADMIN_LOGISTICA"),
-  ctrl.listarCambiosAlmacenTodos
+  ctrl.listarCambiosAlmacenTodosPendientes
 );
 
 
