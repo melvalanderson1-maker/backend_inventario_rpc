@@ -840,59 +840,65 @@ listarMovimientosTodos: async (req, res) => {
 // =====================================================
 // 📦 CAMBIOS DE ALMACÉN - TODOS (NO SOLO PENDIENTES)
 // =====================================================
+
 listarCambiosAlmacenTodos: async (req, res) => {
   try {
-    const { estados } = req.query;
-    const estadosArr = estados ? estados.split(",") : [];
-
-    let sql = `
+    const [rows] = await pool.query(`
       SELECT
         ca.id,
         ca.producto_id,
+        ca.empresa_origen_id,
+        ca.almacen_origen_id,
+        ca.fabricante_origen_id,
+        ca.empresa_destino_id,
+        ca.almacen_destino_id,
+        ca.fabricante_destino_id,
+        ca.cantidad,
+        ca.estado,
+        ca.created_at,
+
         p.codigo AS codigo_producto,
         p.codigo_modelo,
         p.descripcion AS producto,
 
-        ca.empresa_origen_id,
         eo.nombre AS empresa_origen,
-        ca.almacen_origen_id,
         ao.nombre AS almacen_origen,
-        ca.fabricante_origen_id,
         fo.nombre AS fabricante_origen,
 
-        ca.empresa_destino_id,
         ed.nombre AS empresa_destino,
-        ca.almacen_destino_id,
         ad.nombre AS almacen_destino,
-        ca.fabricante_destino_id,
         fd.nombre AS fabricante_destino,
 
-        ca.cantidad_disponible,
-        ca.cantidad,
-        ca.estado,
-        ca.created_at
+        -- ✅ Stock disponible real en origen
+        COALESCE(s_origen.cantidad, 0) AS cantidad_disponible,
+
+        u.nombre AS usuario_logistica
+
       FROM cambios_almacen ca
       INNER JOIN productos p ON p.id = ca.producto_id
       INNER JOIN empresas eo ON eo.id = ca.empresa_origen_id
       INNER JOIN almacenes ao ON ao.id = ca.almacen_origen_id
       LEFT JOIN fabricantes fo ON fo.id = ca.fabricante_origen_id
-      INNER JOIN empresas ed ON ed.id = ca.empresa_destino_id
-      INNER JOIN almacenes ad ON ad.id = ca.almacen_destino_id
+
+      LEFT JOIN empresas ed ON ed.id = ca.empresa_destino_id
+      LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
       LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_destino_id
-      WHERE 1=1
-    `;
 
-    const params = [];
+      LEFT JOIN stock_producto s_origen
+        ON s_origen.producto_id = ca.producto_id
+        AND s_origen.empresa_id = ca.empresa_origen_id
+        AND s_origen.almacen_id = ca.almacen_origen_id
+        AND (
+          (s_origen.fabricante_id IS NULL AND ca.fabricante_origen_id IS NULL)
+          OR s_origen.fabricante_id = ca.fabricante_origen_id
+        )
 
-    if (estadosArr.length) {
-      sql += ` AND ca.estado IN (${estadosArr.map(() => "?").join(",")})`;
-      params.push(...estadosArr);
-    }
+      INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
 
-    sql += " ORDER BY ca.created_at DESC";
+      WHERE ca.estado IN ('PENDIENTE_SALIDA','PENDIENTE_INGRESO')
+      ORDER BY ca.created_at ASC
+    `);
 
-    const [rows] = await pool.query(sql, params);
-    console.log("🧪 CAMBIOS ALMACÉN GLOBAL:", rows[0]);
     res.json(rows);
   } catch (error) {
     console.error("❌ listarCambiosAlmacenTodos:", error);
