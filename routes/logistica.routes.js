@@ -41,6 +41,13 @@ router.get(
 );
 
 
+router.get(
+  "/cambios-almacen/todos",
+  rolMiddleware("ADMIN_LOGISTICA"),
+  ctrl.listarCambiosAlmacenTodos
+);
+
+
 
 // =====================
 // Cambios de almacén 🔥
