@@ -40,7 +40,19 @@ router.get(
   ctrl.listarMovimientosTodos
 );
 
+// Ruta para listar todos los cambios de almacén
+router.get(
+  "/cambios-almacen/todos",
+  rolMiddleware("ADMIN_LOGISTICA"), // Solo usuarios con este rol
+  ctrl.listarCambiosAlmacenTodos
+);
 
+
+router.get(
+  "/cambios-almacen/pendientes",
+  rolMiddleware("ADMIN_LOGISTICA"),
+  ctrl.listarCambiosAlmacenPendientes
+);
 
 
 

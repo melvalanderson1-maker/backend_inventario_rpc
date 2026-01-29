@@ -837,6 +837,55 @@ listarMovimientosTodos: async (req, res) => {
 },
 
 
+// ✅ Listar todos los cambios de almacén
+  listarCambiosAlmacenTodos: async (req, res) => {
+    try {
+      const { estados } = req.query; // opcional: puedes enviar "PENDIENTE_SALIDA,PENDIENTE_INGRESO,VALIDADO_LOGISTICA"
+      const estadosArray = estados ? estados.split(",") : ["PENDIENTE_SALIDA", "PENDIENTE_INGRESO"];
+
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          ca.*,
+          p.codigo AS codigo_producto,
+          p.codigo_modelo,
+          p.descripcion AS producto,
+          eo.nombre AS empresa_origen,
+          ao.nombre AS almacen_origen,
+          ed.nombre AS empresa_destino,
+          ad.nombre AS almacen_destino,
+          f.nombre AS fabricante_origen,
+          fd.nombre AS fabricante_destino,
+          COALESCE(s_origen.cantidad, 0) AS cantidad_disponible,
+          u.nombre AS usuario_logistica
+        FROM cambios_almacen ca
+        INNER JOIN productos p ON p.id = ca.producto_id
+        INNER JOIN empresas eo ON eo.id = ca.empresa_origen_id
+        INNER JOIN almacenes ao ON ao.id = ca.almacen_origen_id
+        LEFT JOIN empresas ed ON ed.id = ca.empresa_id
+        LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
+        LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
+        LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_id
+        LEFT JOIN stock_producto s_origen 
+          ON s_origen.producto_id = ca.producto_id
+          AND s_origen.empresa_id = ca.empresa_origen_id
+          AND s_origen.almacen_id = ca.almacen_origen_id
+          AND s_origen.fabricante_id = ca.fabricante_origen_id
+        INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
+        WHERE ca.estado IN (?)
+        ORDER BY ca.created_at ASC
+      `,
+        [estadosArray]
+      );
+
+      res.json(rows);
+    } catch (error) {
+      console.error("❌ listarCambiosAlmacenTodos:", error);
+      res.status(500).json({ error: "Error listando todos los cambios de almacén" });
+    }
+  },
+
+
 listarCambiosAlmacenPendientes: async (req, res) => {
   try {
     const [rows] = await pool.query(`
