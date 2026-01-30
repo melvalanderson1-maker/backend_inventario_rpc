@@ -61,5 +61,30 @@ router.get("/movimientos/:id", controller.getMovimientoById);
 
 
 
+//ROUTES PARA MODULO MOVIMIENTOS GENERALES
+// Ruta para listar todos los cambios de almacén
+router.get(
+  "/cambios-almacen/todos",
+  rolMiddleware("ADMIN_COMPRAS"), // Solo usuarios con este rol
+  controller.listarCambiosAlmacenTodosCompras
+);
+
+
+//MENU MOVIMINETOS PARA TABLAS GENERALES
+
+router.get(
+  "/movimientos/todos",
+  rolMiddleware("ADMIN_COMPRAS"),
+  controller.listarMovimientosTodosCompras
+);
+
+
+router.get("/movimientos/:id/ultima-observacion", controller.getUltimaObservacionCompras);
+
+router.get("/movimientos/:id/detalle", rolMiddleware("ADMIN_COMPRAS"), controller.detalleMovimiento);
+
+
+
+
 
 module.exports = router;

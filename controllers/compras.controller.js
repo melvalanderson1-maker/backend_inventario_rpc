@@ -1011,6 +1011,243 @@ listarMarcas: async (req, res) => {
 
 
 
+
+
+//LISTAR MOVIMIENTOS GENERALES PARA DASHBOARD Y MODULO DE MOVIMIENTOS
+
+
+
+// ✅ Listar todos los cambios de almacén
+  listarCambiosAlmacenTodosCompras: async (req, res) => {
+    try {
+      const { estados } = req.query; // opcional: puedes enviar "PENDIENTE_SALIDA,PENDIENTE_INGRESO,VALIDADO_LOGISTICA"
+      const estadosArray = estados ? estados.split(",") : ["PENDIENTE_SALIDA", "PENDIENTE_INGRESO"];
+
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          ca.*,
+          p.codigo AS codigo_producto,
+          p.codigo_modelo,
+          p.descripcion AS producto,
+          eo.nombre AS empresa_origen,
+          ao.nombre AS almacen_origen,
+          ed.nombre AS empresa_destino,
+          ad.nombre AS almacen_destino,
+          f.nombre AS fabricante_origen,
+          fd.nombre AS fabricante_destino,
+          COALESCE(s_origen.cantidad, 0) AS cantidad_disponible,
+          u.nombre AS usuario_logistica
+        FROM cambios_almacen ca
+        INNER JOIN productos p ON p.id = ca.producto_id
+        INNER JOIN empresas eo ON eo.id = ca.empresa_origen_id
+        INNER JOIN almacenes ao ON ao.id = ca.almacen_origen_id
+        LEFT JOIN empresas ed ON ed.id = ca.empresa_id
+        LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
+        LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
+        LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_id
+        LEFT JOIN stock_producto s_origen 
+          ON s_origen.producto_id = ca.producto_id
+          AND s_origen.empresa_id = ca.empresa_origen_id
+          AND s_origen.almacen_id = ca.almacen_origen_id
+          AND s_origen.fabricante_id = ca.fabricante_origen_id
+        INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
+        WHERE ca.estado IN (?)
+        ORDER BY ca.created_at ASC
+      `,
+        [estadosArray]
+      );
+
+      res.json(rows);
+    } catch (error) {
+      console.error("❌ listarCambiosAlmacenTodos:", error);
+      res.status(500).json({ error: "Error listando todos los cambios de almacén" });
+    }
+  },
+
+
+
+// 📋 LISTAR TODOS LOS MOVIMIENTOS (GLOBAL)
+// =====================================================
+listarMovimientosTodosCompras: async (req, res) => {
+  try {
+    const { estados } = req.query;
+    const estadosArr = estados ? estados.split(",") : [];
+
+    let sql = `
+      SELECT
+        mi.id,
+        mi.producto_id,
+        mi.empresa_id,
+        mi.fabricante_id,
+        mi.almacen_id,
+        mi.tipo_movimiento,
+        mi.op_vinculada,
+        mi.cantidad,
+        mi.cantidad_solicitada,
+        mi.precio,
+        mi.estado,
+        mi.created_at AS fecha_creacion,
+        mi.fecha_validacion_logistica,
+
+        p.codigo AS producto_codigo,
+        p.codigo_modelo,
+        p.descripcion AS producto_descripcion,
+        e.nombre AS empresa,
+        a.nombre AS almacen,
+        f.nombre AS fabricante,
+
+        mi.observaciones AS observaciones_compras,
+
+        (
+          SELECT CONCAT(IFNULL(mrm.nombre, ''), ' - ', IFNULL(vm.observaciones, ''))
+          FROM validaciones_movimiento vm
+          LEFT JOIN motivos_rechazo_movimiento mrm
+            ON mrm.id = mi.motivo_id
+          WHERE vm.movimiento_id = mi.id
+            AND vm.rol = 'LOGISTICA'
+          ORDER BY vm.created_at DESC
+          LIMIT 1
+        ) AS motivo_rechazo,
+        (
+          SELECT u.nombre
+          FROM validaciones_movimiento vm
+          INNER JOIN usuarios u ON u.id = vm.usuario_id
+          WHERE vm.movimiento_id = mi.id
+            AND vm.rol = 'LOGISTICA'
+          ORDER BY vm.created_at DESC
+          LIMIT 1
+        ) AS usuario_logistica
+
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
+      INNER JOIN empresas e ON e.id = mi.empresa_id
+      LEFT JOIN almacenes a ON a.id = mi.almacen_id
+      LEFT JOIN fabricantes f ON f.id = mi.fabricante_id
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    if (estadosArr.length) {
+      sql += ` AND mi.estado IN (${estadosArr.map(() => "?").join(",")})`;
+      params.push(...estadosArr);
+    }
+
+    sql += " ORDER BY mi.created_at DESC";
+
+    const [rows] = await pool.query(sql, params);
+    console.log("🧪 MOVIMIENTOS GLOBAL SAMPLE:", rows[0]);
+    res.json(rows);
+  } catch (error) {
+    console.error("❌ listarMovimientosTodos:", error);
+    res.status(500).json({ error: "Error obteniendo movimientos" });
+  }
+},
+
+
+
+
+
+  // =====================================================
+  // 📝 ÚLTIMA OBSERVACIÓN DE LOGÍSTICA
+  // =====================================================
+getUltimaObservacionCompras: async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [[row]] = await pool.query(
+      `
+      SELECT observaciones
+      FROM validaciones_movimiento
+      WHERE movimiento_id = ?
+        AND rol = 'LOGISTICA'
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    res.json({ observaciones: row?.observaciones || "" });
+  } catch (error) {
+    console.error("❌ getUltimaObservacionLogistica:", error);
+    res.status(500).json({ error: "Error obteniendo observación logística" });
+  }
+},
+
+
+
+
+
+
+detalleMovimiento: async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [movs] = await pool.query(
+      `SELECT 
+         m.*,
+         u.nombre AS usuario_creador,
+         p.descripcion AS producto,
+         e.nombre AS empresa,
+         a.nombre AS almacen,
+         f.nombre AS fabricante
+       FROM movimientos_inventario m
+       LEFT JOIN usuarios u ON u.id = m.usuario_creador_id
+       LEFT JOIN productos p ON p.id = m.producto_id
+       LEFT JOIN empresas e ON e.id = m.empresa_id
+       LEFT JOIN almacenes a ON a.id = m.almacen_id
+       LEFT JOIN fabricantes f ON f.id = m.fabricante_id
+       WHERE m.id = ?`,
+      [id]
+    );
+
+    if (!movs[0]) {
+      return res.status(404).json({ ok: false, msg: "Movimiento no encontrado" });
+    }
+
+    const movimiento = movs[0];
+
+    const [validaciones] = await pool.query(
+      `SELECT 
+         v.*, 
+         u.nombre AS usuario
+       FROM validaciones_movimiento v
+       LEFT JOIN usuarios u ON u.id = v.usuario_id
+       WHERE v.movimiento_id = ?
+       ORDER BY v.created_at ASC`,
+      [id]
+    );
+
+    const logistica = validaciones.find(v => v.rol === "LOGISTICA") || {};
+    const contabilidad = validaciones.find(v => v.rol === "CONTABILIDAD") || {};
+
+    res.json({
+      ...movimiento,
+      usuario_logistica: logistica.usuario || null,
+      usuario_contabilidad: contabilidad.usuario || null,
+      observacion_logistica: logistica.observaciones || null,
+      observacion_contabilidad: contabilidad.observaciones || null,
+      motivo_contabilidad: movimiento.motivo_contabilidad || null, // 🔥 CLAVE
+      validaciones,
+    });
+  } catch (error) {
+    console.error("❌ detalleMovimiento:", error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+},
+
+
+
+
+
+
+
+
+
+//---------------------------------------------------------------------
+
+
 crearMovimientoEntrada: async (req, res) => {
   const conn = await pool.getConnection();
   try {
