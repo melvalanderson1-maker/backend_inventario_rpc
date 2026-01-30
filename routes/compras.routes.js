@@ -54,11 +54,6 @@ router.get("/modelos", controller.listarModelos);
 router.get("/marcas", controller.listarMarcas);
 
 
-router.put("/movimientos/:id", controller.editarMovimientoCompras);
-router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
-
-router.get("/movimientos/:id", controller.getMovimientoById);
-
 
 
 //ROUTES PARA MODULO MOVIMIENTOS GENERALES
@@ -80,6 +75,18 @@ router.get(
 router.get("/movimientos/:id/ultima-observacion", controller.getUltimaObservacionCompras);
 
 router.get("/movimientos/:id/detalle", controller.detalleMovimiento);
+
+
+
+
+router.put("/movimientos/:id", controller.editarMovimientoCompras);
+router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
+
+router.get("/movimientos/:id", controller.getMovimientoById);
+
+
+
+
 
 
 
