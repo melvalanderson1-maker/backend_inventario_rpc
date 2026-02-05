@@ -1719,7 +1719,7 @@ rechazarMovimientoLogistica: async (req, res) => {
 
 obtenerAtributosProducto: async (req, res) => {
   try {
-    const { productoId } = req.params;
+    const { id: productoId } = req.params; // 🔹 CORRECCIÓN
 
     if (!productoId) {
       return res.status(400).json({ error: "productoId requerido" });
