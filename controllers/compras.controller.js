@@ -1719,45 +1719,88 @@ rechazarMovimientoLogistica: async (req, res) => {
 
 obtenerAtributosProducto: async (req, res) => {
   try {
-    const { id } = req.params;
+    const { productoId } = req.params;
 
-    // 1️⃣ Obtener el producto y su categoría
-    const [productos] = await pool.query("SELECT * FROM productos WHERE id = ?", [id]);
-    if (productos.length === 0) {
+    if (!productoId) {
+      return res.status(400).json({ error: "productoId requerido" });
+    }
+
+    // 1️⃣ Obtener los atributos del producto principal o variante
+    const [atributosProducto] = await pool.query(
+      `
+      SELECT 
+        pa.id AS producto_atributo_id,
+        a.id AS atributo_id,
+        a.nombre AS atributo_nombre,
+        a.tipo AS atributo_tipo,
+        pa.valor
+      FROM producto_atributos pa
+      INNER JOIN atributos a ON a.id = pa.atributo_id
+      WHERE pa.producto_id = ?
+      ORDER BY a.nombre ASC
+      `,
+      [productoId]
+    );
+
+    // 2️⃣ Obtener datos básicos del producto
+    const [[producto]] = await pool.query(
+      `
+      SELECT id, codigo, codigo_modelo, descripcion, producto_padre_id
+      FROM productos
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [productoId]
+    );
+
+    if (!producto) {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
-    const producto = productos[0];
 
-    // 2️⃣ Obtener los atributos de la categoría
-    const [atributosCategoria] = await pool.query(
-      "SELECT * FROM categoria_atributos WHERE categoria_id = ?",
-      [producto.categoria_id]
-    );
+    // 3️⃣ Si el producto es variante, obtener atributos del padre que no estén definidos en la variante
+    let atributosCompletos = [...atributosProducto];
 
-    // 3️⃣ Obtener los valores que ya tiene el producto
-    const [valores] = await pool.query(
-      "SELECT * FROM producto_atributos WHERE producto_id = ?",
-      [id]
-    );
+    if (producto.producto_padre_id) {
+      const [atributosPadre] = await pool.query(
+        `
+        SELECT 
+          pa.id AS producto_atributo_id,
+          a.id AS atributo_id,
+          a.nombre AS atributo_nombre,
+          a.tipo AS atributo_tipo,
+          pa.valor
+        FROM producto_atributos pa
+        INNER JOIN atributos a ON a.id = pa.atributo_id
+        WHERE pa.producto_id = ?
+        ORDER BY a.nombre ASC
+        `,
+        [producto.producto_padre_id]
+      );
 
-    // 4️⃣ Mapear los valores a un objeto para fácil uso en React
-    const valoresMapa = {};
-    valores.forEach(v => {
-      valoresMapa[v.atributo_id] = v.valor;
-    });
+      // Solo agregar los atributos del padre que la variante no tenga
+      const idsExistentes = new Set(atributosProducto.map(ap => ap.atributo_id));
+      atributosPadre.forEach(ap => {
+        if (!idsExistentes.has(ap.atributo_id)) {
+          atributosCompletos.push(ap);
+        }
+      });
+    }
 
-    // 5️⃣ Responder con ambos: atributos de categoría y valores del producto
     res.json({
-      atributosCategoria,
-      valoresProducto: valoresMapa
+      producto: {
+        id: producto.id,
+        codigo: producto.codigo,
+        codigo_modelo: producto.codigo_modelo,
+        descripcion: producto.descripcion,
+      },
+      atributos: atributosCompletos
     });
 
   } catch (error) {
-    console.error("❌ Error obtenerAtributosProducto:", error);
-    res.status(500).json({ error: "Error al obtener atributos del producto" });
+    console.error("❌ obtenerAtributosProducto:", error);
+    res.status(500).json({ error: "Error obteniendo atributos del producto" });
   }
 },
-
 
 editarProducto: async (req, res) => {
   try {
