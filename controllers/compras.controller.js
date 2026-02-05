@@ -1801,29 +1801,56 @@ obtenerAtributosProducto: async (req, res) => {
     res.status(500).json({ error: "Error obteniendo atributos del producto" });
   }
 },
-
 editarProducto: async (req, res) => {
   try {
-    const { id } = req.params; // id del producto
+    const { id } = req.params; 
     const { codigo, modelo, marca, descripcion, categoria_id, atributos } = req.body;
-    const archivos = req.files; // si se suben imágenes
+    const archivos = req.files;
 
-    // 1️⃣ Verificar si el producto existe
+    // =====================
+    // 1️⃣ Validaciones básicas
+    // =====================
+    if (!codigo || codigo.trim() === "") {
+      return res.status(400).json({ error: "El código es obligatorio" });
+    }
+
+    // Limitar tamaño de campos
+    const codigoSafe = codigo.trim().slice(0, 255);
+    const modeloSafe = modelo ? modelo.trim().slice(0, 255) : "";
+    const marcaSafe = marca ? marca.trim().slice(0, 255) : "";
+    const descripcionSafe = descripcion ? descripcion.trim().slice(0, 1000) : "";
+
+    // =====================
+    // 2️⃣ Verificar si el producto existe
+    // =====================
     const [productos] = await pool.query("SELECT * FROM productos WHERE id = ?", [id]);
     if (productos.length === 0) {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    // 2️⃣ Actualizar campos básicos
-    let sqlUpdateProducto = `
-      UPDATE productos SET codigo = ?, modelo = ?, marca = ?, descripcion = ?, categoria_id = ?
-    `;
-    const paramsProducto = [codigo, modelo, marca, descripcion, categoria_id];
+    // =====================
+    // 3️⃣ Verificar que el código sea único
+    // =====================
+    const [codigosExistentes] = await pool.query(
+      "SELECT id FROM productos WHERE codigo = ? AND id != ?",
+      [codigoSafe, id]
+    );
 
-    // 3️⃣ Manejar imagen si se subió
+    if (codigosExistentes.length > 0) {
+      return res.status(400).json({ error: "Código ya existente" });
+    }
+
+    // =====================
+    // 4️⃣ Actualizar campos básicos (sin cambiar categoría)
+    // =====================
+    let sqlUpdateProducto = `
+      UPDATE productos SET codigo = ?, modelo = ?, marca = ?, descripcion = ?
+    `;
+    const paramsProducto = [codigoSafe, modeloSafe, marcaSafe, descripcionSafe];
+
     if (archivos && archivos.length > 0) {
       sqlUpdateProducto += `, imagen = ?`;
-      paramsProducto.push(archivos[0].filename); // asumiendo que guardas filename
+      paramsProducto.push(archivos[0].filename);
     }
 
     sqlUpdateProducto += ` WHERE id = ?`;
@@ -1831,24 +1858,54 @@ editarProducto: async (req, res) => {
 
     await pool.query(sqlUpdateProducto, paramsProducto);
 
-    // 4️⃣ Actualizar atributos dinámicos
+    // =====================
+    // 5️⃣ Actualizar atributos dinámicos (pueden quedar vacíos)
+    // =====================
     if (atributos) {
-      for (let attrId in atributos) {
-        const valor = atributos[attrId];
+      const [atributosExistentes] = await pool.query(
+        "SELECT atributo_id FROM producto_atributos WHERE producto_id = ?",
+        [id]
+      );
+      const existentesSet = new Set(atributosExistentes.map(a => a.atributo_id));
 
-        // Usamos INSERT ... ON DUPLICATE KEY UPDATE
+      const attrIdsFormulario = [];
+
+      for (let attrId in atributos) {
+        let valor = atributos[attrId] || ""; // permitir vacío
+        valor = valor.trim().slice(0, 255); // max 255 caracteres
+
+        attrIdsFormulario.push(Number(attrId));
+
+        if (existentesSet.has(Number(attrId))) {
+          // UPDATE
+          await pool.query(
+            "UPDATE producto_atributos SET valor = ? WHERE producto_id = ? AND atributo_id = ?",
+            [valor, id, attrId]
+          );
+        } else {
+          // INSERT
+          await pool.query(
+            "INSERT INTO producto_atributos (producto_id, atributo_id, valor) VALUES (?, ?, ?)",
+            [id, attrId, valor]
+          );
+        }
+      }
+
+      // Eliminar atributos que ya no están en el formulario
+      if (attrIdsFormulario.length > 0) {
         await pool.query(
-          `
-          INSERT INTO producto_atributos (producto_id, atributo_id, valor)
-          VALUES (?, ?, ?)
-          ON DUPLICATE KEY UPDATE valor = VALUES(valor)
-          `,
-          [id, attrId, valor]
+          "DELETE FROM producto_atributos WHERE producto_id = ? AND atributo_id NOT IN (?)",
+          [id, attrIdsFormulario]
         );
       }
+    } else {
+      // Si no hay atributos → eliminar todos
+      await pool.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
     }
 
-    // 5️⃣ Responder al frontend
+    // =====================
+    // 6️⃣ Responder al frontend
+    // =====================
     res.json({ mensaje: "Producto actualizado correctamente" });
 
   } catch (error) {
@@ -1856,7 +1913,6 @@ editarProducto: async (req, res) => {
     res.status(500).json({ error: "Error al actualizar producto" });
   }
 },
-
 
 
 
