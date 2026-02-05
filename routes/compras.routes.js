@@ -49,6 +49,10 @@ router.get("/precio-stock", controller.obtenerPrecioPorStock);
 router.get("/productos/existe-codigo/:codigo", controller.existeCodigoProducto);
 router.get("/productos/existe-codigo-variante/:codigo", controller.existeCodigoVariante);
 
+//PARA EDITAR PRODUCTOS
+router.get("/productos/existe-codigoparaEditar/:codigo", controller.existeCodigoProductoparaEditar);
+
+
 
 
 router.get("/motivos-movimiento", controller.listarMotivosMovimiento);

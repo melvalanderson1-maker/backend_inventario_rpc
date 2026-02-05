@@ -1716,6 +1716,28 @@ rechazarMovimientoLogistica: async (req, res) => {
 },
 
 
+existeCodigoProductoparaEditar: async (req, res) => {
+  try {
+    const { codigo } = req.params;
+
+    const [rowsCodigo] = await pool.query(
+      `SELECT * FROM productos WHERE codigo = ? LIMIT 1`,
+      [codigo]
+    );
+
+    const [rowsVariante] = await pool.query(
+      `SELECT * FROM productos WHERE codigo_modelo = ? LIMIT 1`,
+      [codigo]
+    );
+
+    const productoEncontrado = rowsCodigo[0] || rowsVariante[0] || null;
+
+    res.json({ producto: productoEncontrado });
+  } catch (err) {
+    console.error("❌ Error existeCodigoProductoparaEditar:", err);
+    res.status(500).json({ error: "Error al verificar código para edición" });
+  }
+},
 
 obtenerAtributosProducto: async (req, res) => {
   try {
