@@ -596,6 +596,10 @@ listarMovimientos: async (req, res) => {
 },
 
 
+
+
+
+
 listarMovimientosPorProducto: async (req, res) => {
   try {
     const { productoId, estados } = req.query;
@@ -1708,6 +1712,105 @@ rechazarMovimientoLogistica: async (req, res) => {
     res.status(400).json({ error: e.message });
   } finally {
     conn.release();
+  }
+},
+
+
+
+obtenerAtributosProducto: async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1️⃣ Obtener el producto y su categoría
+    const [productos] = await pool.query("SELECT * FROM productos WHERE id = ?", [id]);
+    if (productos.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+    const producto = productos[0];
+
+    // 2️⃣ Obtener los atributos de la categoría
+    const [atributosCategoria] = await pool.query(
+      "SELECT * FROM categoria_atributos WHERE categoria_id = ?",
+      [producto.categoria_id]
+    );
+
+    // 3️⃣ Obtener los valores que ya tiene el producto
+    const [valores] = await pool.query(
+      "SELECT * FROM producto_atributos WHERE producto_id = ?",
+      [id]
+    );
+
+    // 4️⃣ Mapear los valores a un objeto para fácil uso en React
+    const valoresMapa = {};
+    valores.forEach(v => {
+      valoresMapa[v.atributo_id] = v.valor;
+    });
+
+    // 5️⃣ Responder con ambos: atributos de categoría y valores del producto
+    res.json({
+      atributosCategoria,
+      valoresProducto: valoresMapa
+    });
+
+  } catch (error) {
+    console.error("❌ Error obtenerAtributosProducto:", error);
+    res.status(500).json({ error: "Error al obtener atributos del producto" });
+  }
+},
+
+
+editarProducto: async (req, res) => {
+  try {
+    const { id } = req.params; // id del producto
+    const { codigo, modelo, marca, descripcion, categoria_id, atributos } = req.body;
+    const archivos = req.files; // si se suben imágenes
+
+    // 1️⃣ Verificar si el producto existe
+    const [productos] = await pool.query("SELECT * FROM productos WHERE id = ?", [id]);
+    if (productos.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // 2️⃣ Actualizar campos básicos
+    let sqlUpdateProducto = `
+      UPDATE productos SET codigo = ?, modelo = ?, marca = ?, descripcion = ?, categoria_id = ?
+    `;
+    const paramsProducto = [codigo, modelo, marca, descripcion, categoria_id];
+
+    // 3️⃣ Manejar imagen si se subió
+    if (archivos && archivos.length > 0) {
+      sqlUpdateProducto += `, imagen = ?`;
+      paramsProducto.push(archivos[0].filename); // asumiendo que guardas filename
+    }
+
+    sqlUpdateProducto += ` WHERE id = ?`;
+    paramsProducto.push(id);
+
+    await pool.query(sqlUpdateProducto, paramsProducto);
+
+    // 4️⃣ Actualizar atributos dinámicos
+    if (atributos) {
+      for (let attrId in atributos) {
+        const valor = atributos[attrId];
+
+        // Usamos INSERT ... ON DUPLICATE KEY UPDATE
+        await pool.query(
+          `
+          INSERT INTO producto_atributos (producto_id, atributo_id, valor)
+          VALUES (?, ?, ?)
+          ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+          `,
+          [id, attrId, valor]
+        );
+      }
+    }
+
+    // 5️⃣ Responder al frontend
+    res.json({ mensaje: "Producto actualizado correctamente" });
+
+  } catch (error) {
+    console.error("❌ Error editarProducto:", error);
+    res.status(500).json({ error: "Error al actualizar producto" });
   }
 },
 

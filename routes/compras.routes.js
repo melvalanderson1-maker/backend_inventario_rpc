@@ -11,6 +11,10 @@ router.get("/productos", controller.listarProductos);
 router.get("/productos/:id", controller.obtenerProducto);
 router.get("/categorias", controller.listarCategorias);
 
+router.get("/productos/:id/atributos", controller.obtenerAtributosProducto);
+
+
+
 
 
 router.post(
@@ -85,7 +89,7 @@ router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
 router.get("/movimientos/:id", controller.getMovimientoById);
 
 
-
+router.put("/productos/:id", upload.any(), controller.editarProducto);
 
 
 
