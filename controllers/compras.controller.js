@@ -1826,11 +1826,15 @@ obtenerAtributosProducto: async (req, res) => {
 editarProducto: async (req, res) => {
   console.log("📦 BODY:", req.body);
   console.log("🖼 FILE:", req.file);
+
   try {
     const { id } = req.params;
-    const { codigo, modelo, marca, descripcion, categoria_id } = req.body;
-    const archivos = req.file ? [req.file] : []; // single file
-    // ✅ Parsear atributos enviados como JSON
+    const { codigo, modelo, marca, descripcion } = req.body;
+    const imagen = req.file; // 👈 imagen nueva si existe
+
+    // =====================
+    // 1️⃣ Parsear atributos
+    // =====================
     let atributos = {};
     try {
       atributos =
@@ -1843,9 +1847,11 @@ editarProducto: async (req, res) => {
     }
 
     // =====================
-    // 1️⃣ Validaciones básicas
+    // 2️⃣ Validaciones
     // =====================
-    if (!codigo || codigo.trim() === "") return res.status(400).json({ error: "El código es obligatorio" });
+    if (!codigo || codigo.trim() === "") {
+      return res.status(400).json({ error: "El código es obligatorio" });
+    }
 
     const codigoSafe = codigo.trim().slice(0, 255);
     const modeloSafe = modelo ? modelo.trim().slice(0, 255) : "";
@@ -1853,92 +1859,132 @@ editarProducto: async (req, res) => {
     const descripcionSafe = descripcion ? descripcion.trim().slice(0, 1000) : "";
 
     // =====================
-    // 2️⃣ Verificar existencia
+    // 3️⃣ Verificar producto
     // =====================
-    const [productos] = await pool.query("SELECT * FROM productos WHERE id = ?", [id]);
-    if (productos.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
+    const [productos] = await pool.query(
+      "SELECT id FROM productos WHERE id = ?",
+      [id]
+    );
+
+    if (productos.length === 0) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
 
     // =====================
-    // 3️⃣ Verificar código único
+    // 4️⃣ Código único
     // =====================
     const [codigosExistentes] = await pool.query(
       "SELECT id FROM productos WHERE codigo = ? AND id != ?",
       [codigoSafe, id]
     );
-    if (codigosExistentes.length > 0) return res.status(400).json({ error: "Código ya existente" });
 
-    // =====================
-    // 4️⃣ Actualizar producto
-    // =====================
-    let sqlUpdateProducto = "UPDATE productos SET codigo = ?, modelo = ?, marca = ?, descripcion = ?";
-    const paramsProducto = [codigoSafe, modeloSafe, marcaSafe, descripcionSafe];
-
-    // ✅ Si hay nueva imagen
-    if (archivos && archivos.length > 0) {
-      sqlUpdateProducto += ", imagen = ?";
-      paramsProducto.push(archivos[0].filename);
+    if (codigosExistentes.length > 0) {
+      return res.status(400).json({ error: "Código ya existente" });
     }
 
-    sqlUpdateProducto += " WHERE id = ?";
-    paramsProducto.push(id);
-
-    await pool.query(sqlUpdateProducto, paramsProducto);
+    // =====================
+    // 5️⃣ UPDATE PRODUCTO (SIN IMAGEN)
+    // =====================
+    await pool.query(
+      `
+      UPDATE productos
+      SET codigo = ?, modelo = ?, marca = ?, descripcion = ?
+      WHERE id = ?
+      `,
+      [codigoSafe, modeloSafe, marcaSafe, descripcionSafe, id]
+    );
 
     // =====================
-    // 5️⃣ Actualizar atributos
+    // 6️⃣ ACTUALIZAR / REEMPLAZAR IMAGEN
     // =====================
-    if (atributos && Object.keys(atributos).length > 0) {
-      const [atributosExistentes] = await pool.query(
-        "SELECT atributo_id FROM producto_atributos WHERE producto_id = ?",
+    if (imagen) {
+      const imagePath = `productos/${id}/${Date.now()}`;
+
+      // subir imagen (igual que en crear)
+      await uploadImage(imagen.buffer, imagePath);
+
+      // borrar imagen anterior del producto
+      await pool.query(
+        "DELETE FROM imagenes WHERE producto_id = ? AND tipo = 'producto'",
         [id]
       );
-      const existentesSet = new Set(atributosExistentes.map(a => a.atributo_id));
 
-      const attrIdsFormulario = [];
+      // insertar nueva imagen
+      await pool.query(
+        `
+        INSERT INTO imagenes
+        (producto_id, tipo, ruta, storage_provider, storage_key)
+        VALUES (?,?,?,?,?)
+        `,
+        [id, "producto", imagePath, "cloudinary", imagePath]
+      );
+    }
 
-      for (let attrId in atributos) {
-        const atributoIdNum = Number(attrId);
+    // =====================
+    // 7️⃣ ACTUALIZAR ATRIBUTOS
+    // =====================
+    const [atributosExistentes] = await pool.query(
+      "SELECT atributo_id FROM producto_atributos WHERE producto_id = ?",
+      [id]
+    );
 
-        // ❌ si no es número válido, saltar
-        if (Number.isNaN(atributoIdNum)) continue;
+    const existentesSet = new Set(
+      atributosExistentes.map(a => a.atributo_id)
+    );
 
-        let valor = atributos[attrId];
-        valor = typeof valor === "string" ? valor.trim().slice(0, 255) : "";
+    const attrIdsFormulario = [];
 
-        attrIdsFormulario.push(atributoIdNum);
+    for (const attrId in atributos) {
+      const atributoIdNum = Number(attrId);
+      if (!Number.isInteger(atributoIdNum)) continue;
 
-        if (existentesSet.has(atributoIdNum)) {
-          await pool.query(
-            "UPDATE producto_atributos SET valor = ? WHERE producto_id = ? AND atributo_id = ?",
-            [valor, id, atributoIdNum]
-          );
-        } else {
-          await pool.query(
-            "INSERT INTO producto_atributos (producto_id, atributo_id, valor) VALUES (?, ?, ?)",
-            [id, atributoIdNum, valor]
-          );
-        }
-      }
+      const valor =
+        typeof atributos[attrId] === "string"
+          ? atributos[attrId].trim().slice(0, 255)
+          : "";
 
-      // Eliminar atributos que ya no están en el formulario
-      const attrIdsLimpios = attrIdsFormulario.filter(n => Number.isInteger(n));
+      attrIdsFormulario.push(atributoIdNum);
 
-      if (attrIdsLimpios.length > 0) {
+      if (existentesSet.has(atributoIdNum)) {
         await pool.query(
-          "DELETE FROM producto_atributos WHERE producto_id = ? AND atributo_id NOT IN (?)",
-          [id, attrIdsLimpios]
+          `
+          UPDATE producto_atributos
+          SET valor = ?
+          WHERE producto_id = ? AND atributo_id = ?
+          `,
+          [valor, id, atributoIdNum]
         );
       } else {
         await pool.query(
-          "DELETE FROM producto_atributos WHERE producto_id = ?",
-          [id]
+          `
+          INSERT INTO producto_atributos
+          (producto_id, atributo_id, valor)
+          VALUES (?,?,?)
+          `,
+          [id, atributoIdNum, valor]
         );
       }
-    } else {
-      // Eliminar todos si no hay atributos
-      await pool.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
     }
 
+    if (attrIdsFormulario.length > 0) {
+      await pool.query(
+        `
+        DELETE FROM producto_atributos
+        WHERE producto_id = ?
+        AND atributo_id NOT IN (?)
+        `,
+        [id, attrIdsFormulario]
+      );
+    } else {
+      await pool.query(
+        "DELETE FROM producto_atributos WHERE producto_id = ?",
+        [id]
+      );
+    }
+
+    // =====================
+    // 8️⃣ RESPUESTA FINAL
+    // =====================
     res.json({ mensaje: "Producto actualizado correctamente" });
 
   } catch (error) {
@@ -1946,8 +1992,6 @@ editarProducto: async (req, res) => {
     res.status(500).json({ error: "Error al actualizar producto" });
   }
 },
-
-
 
   };
 
