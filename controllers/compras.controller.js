@@ -1824,68 +1824,56 @@ obtenerAtributosProducto: async (req, res) => {
   }
 },
 editarProducto: async (req, res) => {
-  console.log("📦 BODY:", req.body);
-  console.log("🖼 FILE:", req.file);
+  const conn = await pool.getConnection();
 
   try {
     const { id } = req.params;
     const { codigo, modelo, marca, descripcion } = req.body;
-    const imagen = req.file; // 👈 imagen nueva si existe
+    const imagen = req.file;
 
-    // =====================
-    // 1️⃣ Parsear atributos
-    // =====================
     let atributos = {};
     try {
       atributos =
         typeof req.body.atributos === "string"
           ? JSON.parse(req.body.atributos)
           : req.body.atributos || {};
-    } catch (e) {
-      console.error("❌ Error parseando atributos:", req.body.atributos);
+    } catch {
       atributos = {};
     }
 
-    // =====================
-    // 2️⃣ Validaciones
-    // =====================
-    if (!codigo || codigo.trim() === "") {
+    if (!codigo || !codigo.trim()) {
       return res.status(400).json({ error: "El código es obligatorio" });
     }
 
     const codigoSafe = codigo.trim().slice(0, 255);
-    const modeloSafe = modelo ? modelo.trim().slice(0, 255) : "";
-    const marcaSafe = marca ? marca.trim().slice(0, 255) : "";
-    const descripcionSafe = descripcion ? descripcion.trim().slice(0, 1000) : "";
+    const modeloSafe = modelo?.trim().slice(0, 255) || "";
+    const marcaSafe = marca?.trim().slice(0, 255) || "";
+    const descripcionSafe = descripcion?.trim().slice(0, 1000) || "";
 
-    // =====================
-    // 3️⃣ Verificar producto
-    // =====================
-    const [productos] = await pool.query(
+    await conn.beginTransaction();
+
+    // 1️⃣ verificar producto
+    const [[producto]] = await conn.query(
       "SELECT id FROM productos WHERE id = ?",
       [id]
     );
-
-    if (productos.length === 0) {
+    if (!producto) {
+      await conn.rollback();
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    // =====================
-    // 4️⃣ Código único
-    // =====================
-    const [codigosExistentes] = await pool.query(
+    // 2️⃣ código único
+    const [codigoExiste] = await conn.query(
       "SELECT id FROM productos WHERE codigo = ? AND id != ?",
       [codigoSafe, id]
     );
-
-    if (codigosExistentes.length > 0) {
+    if (codigoExiste.length) {
+      await conn.rollback();
       return res.status(400).json({ error: "Código ya existente" });
     }
 
-    // =====================
-    // 5️⃣ UPDATE PRODUCTO (SIN IMAGEN)
-    // =====================
-    await pool.query(
+    // 3️⃣ update producto
+    await conn.query(
       `
       UPDATE productos
       SET codigo = ?, modelo = ?, marca = ?, descripcion = ?
@@ -1894,23 +1882,19 @@ editarProducto: async (req, res) => {
       [codigoSafe, modeloSafe, marcaSafe, descripcionSafe, id]
     );
 
-    // =====================
-    // 6️⃣ ACTUALIZAR / REEMPLAZAR IMAGEN
-    // =====================
+    // 4️⃣ imagen (PARALELO)
     if (imagen) {
       const imagePath = `productos/${id}/${Date.now()}`;
 
-      // subir imagen (igual que en crear)
-      await uploadImage(imagen.buffer, imagePath);
+      await Promise.all([
+        uploadImage(imagen.buffer, imagePath),
+        conn.query(
+          "DELETE FROM imagenes WHERE producto_id = ? AND tipo = 'producto'",
+          [id]
+        )
+      ]);
 
-      // borrar imagen anterior del producto
-      await pool.query(
-        "DELETE FROM imagenes WHERE producto_id = ? AND tipo = 'producto'",
-        [id]
-      );
-
-      // insertar nueva imagen
-      await pool.query(
+      await conn.query(
         `
         INSERT INTO imagenes
         (producto_id, tipo, ruta, storage_provider, storage_key)
@@ -1920,76 +1904,54 @@ editarProducto: async (req, res) => {
       );
     }
 
-    // =====================
-    // 7️⃣ ACTUALIZAR ATRIBUTOS
-    // =====================
-    const [atributosExistentes] = await pool.query(
-      "SELECT atributo_id FROM producto_atributos WHERE producto_id = ?",
-      [id]
-    );
-
-    const existentesSet = new Set(
-      atributosExistentes.map(a => a.atributo_id)
-    );
-
-    const attrIdsFormulario = [];
+    // 5️⃣ ATRIBUTOS EN BLOQUE (🔥 LO QUE ACELERA TODO)
+    const valores = [];
 
     for (const attrId in atributos) {
       const atributoIdNum = Number(attrId);
       if (!Number.isInteger(atributoIdNum)) continue;
 
-      const valor =
-        typeof atributos[attrId] === "string"
-          ? atributos[attrId].trim().slice(0, 255)
-          : "";
+      const valor = String(atributos[attrId] || "")
+        .trim()
+        .slice(0, 255);
 
-      attrIdsFormulario.push(atributoIdNum);
-
-      if (existentesSet.has(atributoIdNum)) {
-        await pool.query(
-          `
-          UPDATE producto_atributos
-          SET valor = ?
-          WHERE producto_id = ? AND atributo_id = ?
-          `,
-          [valor, id, atributoIdNum]
-        );
-      } else {
-        await pool.query(
-          `
-          INSERT INTO producto_atributos
-          (producto_id, atributo_id, valor)
-          VALUES (?,?,?)
-          `,
-          [id, atributoIdNum, valor]
-        );
-      }
+      valores.push([id, atributoIdNum, valor]);
     }
 
-    if (attrIdsFormulario.length > 0) {
-      await pool.query(
+    if (valores.length > 0) {
+      await conn.query(
+        `
+        INSERT INTO producto_atributos (producto_id, atributo_id, valor)
+        VALUES ?
+        ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+        `,
+        [valores]
+      );
+
+      await conn.query(
         `
         DELETE FROM producto_atributos
         WHERE producto_id = ?
         AND atributo_id NOT IN (?)
         `,
-        [id, attrIdsFormulario]
+        [id, valores.map(v => v[1])]
       );
     } else {
-      await pool.query(
+      await conn.query(
         "DELETE FROM producto_atributos WHERE producto_id = ?",
         [id]
       );
     }
 
-    // =====================
-    // 8️⃣ RESPUESTA FINAL
-    // =====================
+    await conn.commit();
     res.json({ mensaje: "Producto actualizado correctamente" });
 
   } catch (error) {
+    await conn.rollback();
     console.error("❌ Error editarProducto:", error);
     res.status(500).json({ error: "Error al actualizar producto" });
+  } finally {
+    conn.release();
   }
 },
 
