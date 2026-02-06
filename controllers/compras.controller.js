@@ -1991,9 +1991,40 @@ solicitarEliminacionProducto: async (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
+
+    // ⏱️ BLOQUEO DE REENVÍO (1 MINUTO)
+    const [[ultimo]] = await conn.query(`
+      SELECT creado_en
+      FROM producto_eliminacion_tokens
+      WHERE producto_id = ?
+        AND usuario_id = ?
+      ORDER BY creado_en DESC
+      LIMIT 1
+    `, [id, usuarioId]);
+
+    if (ultimo) {
+      const diff = (Date.now() - new Date(ultimo.creado_en)) / 1000;
+      if (diff < 60) {
+        return res.status(429).json({
+          error: "Debes esperar 1 minuto para reenviar el código"
+        });
+      }
+    }
+
+
+    // 🔒 INVALIDAR OTPs ANTERIORES (solo uno válido)
+    await conn.query(`
+      UPDATE producto_eliminacion_tokens
+      SET usado = 1
+      WHERE producto_id = ?
+        AND usuario_id = ?
+        AND usado = 0
+    `, [id, usuarioId]);
+
     // 3️⃣ Generar OTP
     const token = Math.floor(100000 + Math.random() * 900000).toString();
     const expira = new Date(Date.now() + 10 * 60 * 1000);
+
 
     // 4️⃣ Guardar token
     await conn.query(
@@ -2020,7 +2051,9 @@ solicitarEliminacionProducto: async (req, res) => {
     console.log(`📧 OTP enviado a ${emailUsuario}:`, token);
 
     res.json({
-      mensaje: "Código de confirmación enviado al correo"
+      mensaje: "Código de confirmación enviado",
+      expiraEn: expira.toISOString(), // 10 min
+      reenviarDisponibleEn: new Date(Date.now() + 60 * 1000).toISOString() // 1 min
     });
 
   } catch (error) {
