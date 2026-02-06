@@ -1897,27 +1897,36 @@ editarProducto: async (req, res) => {
       const attrIdsFormulario = [];
 
       for (let attrId in atributos) {
-        let valor = atributos[attrId]?.trim().slice(0, 255) || "";
-        attrIdsFormulario.push(Number(attrId));
+        const atributoIdNum = Number(attrId);
 
-        if (existentesSet.has(Number(attrId))) {
+        // ❌ si no es número válido, saltar
+        if (Number.isNaN(atributoIdNum)) continue;
+
+        let valor = atributos[attrId];
+        valor = typeof valor === "string" ? valor.trim().slice(0, 255) : "";
+
+        attrIdsFormulario.push(atributoIdNum);
+
+        if (existentesSet.has(atributoIdNum)) {
           await pool.query(
             "UPDATE producto_atributos SET valor = ? WHERE producto_id = ? AND atributo_id = ?",
-            [valor, id, attrId]
+            [valor, id, atributoIdNum]
           );
         } else {
           await pool.query(
             "INSERT INTO producto_atributos (producto_id, atributo_id, valor) VALUES (?, ?, ?)",
-            [id, attrId, valor]
+            [id, atributoIdNum, valor]
           );
         }
       }
 
       // Eliminar atributos que ya no están en el formulario
-      if (attrIdsFormulario.length > 0) {
+      const attrIdsLimpios = attrIdsFormulario.filter(n => Number.isInteger(n));
+
+      if (attrIdsLimpios.length > 0) {
         await pool.query(
           "DELETE FROM producto_atributos WHERE producto_id = ? AND atributo_id NOT IN (?)",
-          [id, attrIdsFormulario]
+          [id, attrIdsLimpios]
         );
       } else {
         await pool.query(
