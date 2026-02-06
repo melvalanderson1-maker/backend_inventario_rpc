@@ -1824,12 +1824,23 @@ obtenerAtributosProducto: async (req, res) => {
   }
 },
 editarProducto: async (req, res) => {
+  console.log("📦 BODY:", req.body);
+  console.log("🖼 FILE:", req.file);
   try {
     const { id } = req.params;
     const { codigo, modelo, marca, descripcion, categoria_id } = req.body;
     const archivos = req.file ? [req.file] : []; // single file
     // ✅ Parsear atributos enviados como JSON
-    const atributos = req.body.atributos ? JSON.parse(req.body.atributos) : {};
+    let atributos = {};
+    try {
+      atributos =
+        typeof req.body.atributos === "string"
+          ? JSON.parse(req.body.atributos)
+          : req.body.atributos || {};
+    } catch (e) {
+      console.error("❌ Error parseando atributos:", req.body.atributos);
+      atributos = {};
+    }
 
     // =====================
     // 1️⃣ Validaciones básicas

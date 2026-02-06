@@ -93,7 +93,19 @@ router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
 router.get("/movimientos/:id", controller.getMovimientoById);
 
 
-router.put("/productos/:id", upload.single("imagen_producto"), controller.editarProducto);
+router.put(
+  "/productos/:id",
+  (req, res, next) => {
+    upload.single("imagen_producto")(req, res, err => {
+      if (err) {
+        console.error("❌ Multer error:", err.message);
+        return res.status(400).json({ error: err.message });
+      }
+      next();
+    });
+  },
+  controller.editarProducto
+);
 
 
 
