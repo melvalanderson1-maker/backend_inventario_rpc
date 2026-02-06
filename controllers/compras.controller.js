@@ -153,6 +153,7 @@ listarProductos: async (req, res) => {
     ) img ON img.producto_id = p.id
 
     WHERE p.activo = 1
+      AND p.eliminado = 0  
       AND p.producto_padre_id IS NULL
       AND (
         p.codigo LIKE ?
