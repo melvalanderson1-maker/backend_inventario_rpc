@@ -2030,8 +2030,8 @@ solicitarEliminacionProducto: async (req, res) => {
     await conn.query(
       `
       INSERT INTO producto_eliminacion_tokens
-      (producto_id, usuario_id, token, expira_en)
-      VALUES (?,?,?,?)
+      (producto_id, usuario_id, token, expira_en, creado_en)
+      VALUES (?,?,?,?,NOW())
       `,
       [id, usuarioId, token, expira]
     );
