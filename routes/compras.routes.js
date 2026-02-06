@@ -93,7 +93,7 @@ router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
 router.get("/movimientos/:id", controller.getMovimientoById);
 
 
-router.put("/productos/:id", upload.any(), controller.editarProducto);
+router.put("/productos/:id", upload.single("imagen_producto"), controller.editarProducto);
 
 
 
