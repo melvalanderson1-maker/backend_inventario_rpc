@@ -5,6 +5,8 @@
 
   const { getOrCreate } = require("../utils/getOrCreate");
 
+
+
   
 
   let pool;
@@ -67,6 +69,8 @@
     );
   }
 };
+
+  const transporter = require("../config/transporter");
 
 
 
@@ -2006,11 +2010,10 @@ solicitarEliminacionProducto: async (req, res) => {
       to: emailUsuario,
       subject: "Código de confirmación – Eliminación de producto",
       html: `
-        <p>Hola,</p>
+        <p>Hola ${req.user.nombre},</p>
         <p>Tu código de confirmación es:</p>
         <h2>${token}</h2>
         <p>Este código vence en 10 minutos.</p>
-        <p>Si no solicitaste esta acción, ignora este correo.</p>
       `
     });
 
