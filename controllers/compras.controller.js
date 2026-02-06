@@ -1969,7 +1969,7 @@ solicitarEliminacionProducto: async (req, res) => {
 
     // 1️⃣ Obtener correo del usuario autenticado
     const [[usuario]] = await conn.query(
-      "SELECT email FROM usuarios WHERE id = ?",
+      "SELECT nombre, apellido_paterno, apellido_materno, email FROM usuarios WHERE id = ?",
       [usuarioId]
     );
 
@@ -1980,6 +1980,7 @@ solicitarEliminacionProducto: async (req, res) => {
     }
 
     const emailUsuario = usuario.email;
+    const nombreCompleto = `${usuario.nombre || ''} ${usuario.apellido_paterno || ''} ${usuario.apellido_materno || ''}`.trim();
 
     // 2️⃣ Verificar producto
     const [[producto]] = await conn.query(
@@ -2039,12 +2040,24 @@ solicitarEliminacionProducto: async (req, res) => {
     // 5️⃣ Enviar correo
     await transporter.sendMail({
       to: emailUsuario,
-      subject: "Código de confirmación – Eliminación de producto",
+      subject: "Confirmación de eliminación de producto – Acción crítica",
       html: `
-        <p>Hola ${req.user.nombre},</p>
-        <p>Tu código de confirmación es:</p>
-        <h2>${token}</h2>
-        <p>Este código vence en 10 minutos.</p>
+        <p>Estimado(a) ${nombreCompleto},</p>
+        
+        <p>Se ha solicitado la eliminación de un producto de nuestro sistema. Esta es una acción <strong>crítica</strong> que podría afectar los registros de inventario y la disponibilidad de este producto en la plataforma.</p>
+        
+        <p>Para confirmar esta operación, ingrese el siguiente código de verificación:</p>
+
+        <p>Producto a eliminar: <strong>${producto.codigo}</strong></p>
+        
+        <h2 style="color:red;">${token}</h2>
+        
+        <p>⚠️ Este código tiene una validez de <strong>10 minutos</strong>. Si no realiza esta acción dentro de este plazo, el código expirará y será necesario generar uno nuevo.</p>
+        
+        <p>Le recomendamos revisar cuidadosamente la información antes de confirmar la eliminación.</p>
+
+        <p>Atentamente,<br>
+        Equipo de Gestión de Productos y TI</p>
       `
     });
 
