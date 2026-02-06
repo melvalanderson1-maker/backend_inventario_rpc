@@ -1963,17 +1963,21 @@ solicitarEliminacionProducto: async (req, res) => {
     const { id } = req.params;
     const usuarioId = req.user.id;
 
-    // 1️⃣ 👉 OBTENER EL CORREO DEL USUARIO AUTENTICADO
-    const emailUsuario = req.user.email;
+    // 1️⃣ Obtener correo del usuario autenticado
+    const [[usuario]] = await conn.query(
+      "SELECT email FROM usuarios WHERE id = ?",
+      [usuarioId]
+    );
 
-    // 2️⃣ 👉 VALIDAR QUE EL USUARIO TENGA CORREO
-    if (!emailUsuario) {
+    if (!usuario || !usuario.email) {
       return res.status(400).json({
         error: "El usuario no tiene correo registrado"
       });
     }
 
-    // 3️⃣ verificar producto
+    const emailUsuario = usuario.email;
+
+    // 2️⃣ Verificar producto
     const [[producto]] = await conn.query(
       "SELECT id, codigo FROM productos WHERE id = ? AND eliminado = 0",
       [id]
@@ -1983,11 +1987,11 @@ solicitarEliminacionProducto: async (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    // 4️⃣ 🔐 Generar OTP
+    // 3️⃣ Generar OTP
     const token = Math.floor(100000 + Math.random() * 900000).toString();
     const expira = new Date(Date.now() + 10 * 60 * 1000);
 
-    // 5️⃣ guardar token
+    // 4️⃣ Guardar token
     await conn.query(
       `
       INSERT INTO producto_eliminacion_tokens
@@ -1997,7 +2001,7 @@ solicitarEliminacionProducto: async (req, res) => {
       [id, usuarioId, token, expira]
     );
 
-    // 6️⃣ 📧 ENVIAR CORREO (PRODUCCIÓN REAL)
+    // 5️⃣ Enviar correo
     await transporter.sendMail({
       to: emailUsuario,
       subject: "Código de confirmación – Eliminación de producto",
@@ -2010,7 +2014,6 @@ solicitarEliminacionProducto: async (req, res) => {
       `
     });
 
-    // (opcional para debug)
     console.log(`📧 OTP enviado a ${emailUsuario}:`, token);
 
     res.json({
@@ -2024,7 +2027,6 @@ solicitarEliminacionProducto: async (req, res) => {
     conn.release();
   }
 },
-
 
 confirmarEliminacionProducto: async (req, res) => {
   const conn = await pool.getConnection();
