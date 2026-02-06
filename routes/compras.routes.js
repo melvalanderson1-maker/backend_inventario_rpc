@@ -107,7 +107,17 @@ router.put(
   controller.editarProducto
 );
 
+//PARA ELIMINAR PRODUCTOS, PRIMERO SE SOLICITA LA ELIMINACION, LUEGO SE CONFIRMA LA ELIMINACION
 
+router.post(
+  "/productos/:id/solicitar-eliminacion",
+  controller.solicitarEliminacionProducto
+);
+
+router.post(
+  "/productos/:id/confirmar-eliminacion",
+  controller.confirmarEliminacionProducto
+);
 
 
 

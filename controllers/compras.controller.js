@@ -1955,6 +1955,165 @@ editarProducto: async (req, res) => {
   }
 },
 
+
+solicitarEliminacionProducto: async (req, res) => {
+  const conn = await pool.getConnection();
+
+  try {
+    const { id } = req.params;
+    const usuarioId = req.user.id;
+
+    // 1️⃣ 👉 OBTENER EL CORREO DEL USUARIO AUTENTICADO
+    const emailUsuario = req.user.email;
+
+    // 2️⃣ 👉 VALIDAR QUE EL USUARIO TENGA CORREO
+    if (!emailUsuario) {
+      return res.status(400).json({
+        error: "El usuario no tiene correo registrado"
+      });
+    }
+
+    // 3️⃣ verificar producto
+    const [[producto]] = await conn.query(
+      "SELECT id, codigo FROM productos WHERE id = ? AND eliminado = 0",
+      [id]
+    );
+
+    if (!producto) {
+      return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // 4️⃣ 🔐 Generar OTP
+    const token = Math.floor(100000 + Math.random() * 900000).toString();
+    const expira = new Date(Date.now() + 10 * 60 * 1000);
+
+    // 5️⃣ guardar token
+    await conn.query(
+      `
+      INSERT INTO producto_eliminacion_tokens
+      (producto_id, usuario_id, token, expira_en)
+      VALUES (?,?,?,?)
+      `,
+      [id, usuarioId, token, expira]
+    );
+
+    // 6️⃣ 📧 ENVIAR CORREO (PRODUCCIÓN REAL)
+    await transporter.sendMail({
+      to: emailUsuario,
+      subject: "Código de confirmación – Eliminación de producto",
+      html: `
+        <p>Hola,</p>
+        <p>Tu código de confirmación es:</p>
+        <h2>${token}</h2>
+        <p>Este código vence en 10 minutos.</p>
+        <p>Si no solicitaste esta acción, ignora este correo.</p>
+      `
+    });
+
+    // (opcional para debug)
+    console.log(`📧 OTP enviado a ${emailUsuario}:`, token);
+
+    res.json({
+      mensaje: "Código de confirmación enviado al correo"
+    });
+
+  } catch (error) {
+    console.error("❌ solicitarEliminacionProducto:", error);
+    res.status(500).json({ error: "Error al solicitar eliminación" });
+  } finally {
+    conn.release();
+  }
+},
+
+
+confirmarEliminacionProducto: async (req, res) => {
+  const conn = await pool.getConnection();
+
+  try {
+    const { id } = req.params;
+    const { token, tipo } = req.body; 
+    // tipo: "inactivar" | "logico" | "fisico"
+    const usuarioId = req.user.id;
+
+    await conn.beginTransaction();
+
+    // 1️⃣ validar token
+    const [[registro]] = await conn.query(
+      `
+      SELECT * FROM producto_eliminacion_tokens
+      WHERE producto_id = ?
+      AND token = ?
+      AND usuario_id = ?
+      AND usado = 0
+      AND expira_en > NOW()
+      `,
+      [id, token, usuarioId]
+    );
+
+    if (!registro) {
+      await conn.rollback();
+      return res.status(400).json({ error: "Código inválido o expirado" });
+    }
+
+    // 2️⃣ verificar movimientos
+    const [[movs]] = await conn.query(
+      "SELECT COUNT(*) total FROM movimientos_inventario WHERE producto_id = ?",
+      [id]
+    );
+
+    if (tipo === "fisico" && movs.total > 0) {
+      await conn.rollback();
+      return res.status(409).json({
+        error: "No se puede eliminar físicamente: tiene movimientos"
+      });
+    }
+
+    // 3️⃣ ejecutar acción
+    if (tipo === "inactivar") {
+      await conn.query(
+        "UPDATE productos SET activo = 0 WHERE id = ?",
+        [id]
+      );
+    }
+
+    if (tipo === "logico") {
+      await conn.query(
+        `
+        UPDATE productos
+        SET eliminado = 1,
+            eliminado_en = NOW(),
+            eliminado_por = ?
+        WHERE id = ?
+        `,
+        [usuarioId, id]
+      );
+    }
+
+    if (tipo === "fisico") {
+      await conn.query("DELETE FROM imagenes WHERE producto_id = ?", [id]);
+      await conn.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
+      await conn.query("DELETE FROM movimientos_inventario WHERE producto_id = ?", [id]);
+      await conn.query("DELETE FROM productos WHERE id = ?", [id]);
+    }
+
+    // 4️⃣ marcar token usado
+    await conn.query(
+      "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
+      [registro.id]
+    );
+
+    await conn.commit();
+    res.json({ mensaje: "Acción ejecutada correctamente" });
+
+  } catch (error) {
+    await conn.rollback();
+    console.error("❌ confirmarEliminacionProducto:", error);
+    res.status(500).json({ error: "Error al eliminar producto" });
+  } finally {
+    conn.release();
+  }
+},
+
   };
 
 
