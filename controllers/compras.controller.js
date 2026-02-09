@@ -556,7 +556,7 @@ listarMovimientos: async (req, res) => {
 
         -- ✅ Último motivo de rechazo + usuario que lo hizo
         vm_rechazo.observaciones AS motivo_rechazo,
-        CONCAT(u.nombre, ' ', u.apellido_paterno, ' ', u.apellido_materno) AS usuario_logistica
+        CONCAT(u.nombre, ' ', u.apellido_paterno, ' ', u.apellido_materno) AS usuario_logistica,
 
         -- 🔥 NUEVO: imagen de evidencia del movimiento
         (
