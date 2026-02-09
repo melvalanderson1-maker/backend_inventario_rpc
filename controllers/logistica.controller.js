@@ -1199,7 +1199,17 @@ listarMovimientosPorProducto: async (req, res) => {
             AND vm.rol = 'LOGISTICA'
           ORDER BY vm.created_at DESC
           LIMIT 1
-        ) AS usuario_logistica
+        ) AS usuario_logistica,
+
+        -- 🔥 NUEVO: imagen de evidencia del movimiento
+        (
+          SELECT i.ruta
+          FROM imagenes i
+          WHERE i.movimiento_id = mi.id
+            AND i.tipo = 'almacen'
+          ORDER BY i.created_at DESC
+          LIMIT 1
+        ) AS evidencia_url
 
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
@@ -1226,8 +1236,6 @@ listarMovimientosPorProducto: async (req, res) => {
     res.status(500).json({ error: "Error obteniendo movimientos" });
   }
 },
-
-
 
 
   // =====================================================
