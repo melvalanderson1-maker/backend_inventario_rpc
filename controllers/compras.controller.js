@@ -558,6 +558,16 @@ listarMovimientos: async (req, res) => {
         vm_rechazo.observaciones AS motivo_rechazo,
         CONCAT(u.nombre, ' ', u.apellido_paterno, ' ', u.apellido_materno) AS usuario_logistica
 
+        -- 🔥 NUEVO: imagen de evidencia del movimiento
+        (
+          SELECT i.ruta
+          FROM imagenes i
+          WHERE i.movimiento_id = mi.id
+            AND i.tipo = 'almacen'
+          ORDER BY i.created_at DESC
+          LIMIT 1
+        ) AS evidencia_url
+
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
       INNER JOIN empresas e ON e.id = mi.empresa_id
