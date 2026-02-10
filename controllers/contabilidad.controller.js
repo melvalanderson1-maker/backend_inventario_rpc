@@ -910,6 +910,94 @@ listarMovimientosPorProducto: async (req, res) => {
 },
 
 
+
+
+  // =====================================================
+  // 📦 STOCK COMPLETO AGRUPADO (SIMPLES + VARIANTES)
+  // =====================================================
+  stockCompleto: async (req, res) => {
+    try {
+      let sql = `
+        SELECT
+          p.id AS producto_id,
+          p.codigo AS codigo_producto,
+          p.codigo_modelo,
+          p.codigo_base,
+
+          mi.empresa_id,
+          e.nombre AS empresa,
+
+          mi.almacen_id,
+          a.nombre AS almacen,
+
+          mi.fabricante_id,
+          f.nombre AS fabricante,
+
+          SUM(
+            CASE
+              WHEN mi.tipo_movimiento IN ('entrada','saldo_inicial')
+                THEN mi.cantidad
+              WHEN mi.tipo_movimiento = 'salida'
+                THEN -mi.cantidad
+              ELSE 0
+            END
+          ) AS stock
+
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+        INNER JOIN empresas e ON e.id = mi.empresa_id
+        LEFT JOIN almacenes a ON a.id = mi.almacen_id
+        LEFT JOIN fabricantes f ON f.id = mi.fabricante_id
+
+        GROUP BY
+          p.id,
+          mi.empresa_id,
+          mi.almacen_id,
+          mi.fabricante_id
+
+        HAVING stock <> 0
+        ORDER BY p.codigo_base, p.codigo
+      `;
+
+      const [rows] = await pool.query(sql);
+
+      // 🧠 AGRUPACIÓN POR CÓDIGO BASE
+      const agrupado = {};
+
+      rows.forEach(row => {
+        const base = row.codigo_base || "";
+
+        if (!agrupado[base]) {
+          agrupado[base] = {
+            codigo_base: base,
+            stock_total: 0,
+            productos: []
+          };
+        }
+
+        agrupado[base].productos.push({
+          producto_id: row.producto_id,
+          codigo_producto: row.codigo_producto,
+          codigo_modelo: row.codigo_modelo,
+          empresa_id: row.empresa_id,
+          empresa: row.empresa,
+          almacen_id: row.almacen_id,
+          almacen: row.almacen,
+          fabricante_id: row.fabricante_id,
+          fabricante: row.fabricante,
+          stock: Number(row.stock)
+        });
+
+        agrupado[base].stock_total += Number(row.stock);
+      });
+
+      res.json(Object.values(agrupado));
+    } catch (error) {
+      console.error("❌ stockCompleto logística:", error);
+      res.status(500).json({ error: "Error obteniendo stock completo" });
+    }
+  },
+
   // =====================================================
   // 📜 HISTORIAL POR PRODUCTO
   // =====================================================

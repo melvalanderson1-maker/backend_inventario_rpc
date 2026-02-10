@@ -93,6 +93,12 @@ router.get("/historial", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.listarHistori
 router.get("/stock-empresa", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.stockPorEmpresa);
 router.get("/motivos-rechazo", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.listarMotivosRechazo);
 
+router.get(
+  "/stock/completo",
+  rolMiddleware("ADMIN_CONTABILIDAD"),
+  ctrl.stockCompleto
+);
+
 // ✅ NUEVAS RUTAS CORRECTAS
 
 
