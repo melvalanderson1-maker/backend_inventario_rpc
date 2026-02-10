@@ -920,49 +920,32 @@ stockCompleto: async (req, res) => {
     const sql = `
       SELECT
         p.id AS producto_id,
-        p.codigo AS codigo_producto,
-        p.codigo_modelo,
-        p.codigo_base,
-
-        mi.empresa_id,
-        e.nombre AS empresa,
-
-        mi.almacen_id,
-        a.nombre AS almacen,
-
-        mi.fabricante_id,
-        f.nombre AS fabricante,
-
-        SUM(
-          CASE
-            WHEN mi.tipo_movimiento IN ('entrada','saldo_inicial')
-              THEN mi.cantidad
-            WHEN mi.tipo_movimiento = 'salida'
-              THEN -mi.cantidad
-            ELSE 0
-          END
-        ) AS stock
-
-      FROM movimientos_inventario mi
-      INNER JOIN productos p ON p.id = mi.producto_id
-      INNER JOIN empresas e ON e.id = mi.empresa_id
-      LEFT JOIN almacenes a ON a.id = mi.almacen_id
-      LEFT JOIN fabricantes f ON f.id = mi.fabricante_id
-
-      GROUP BY
-        p.id,
         p.codigo,
         p.codigo_modelo,
-        p.codigo_base,
-        mi.empresa_id,
-        e.nombre,
-        mi.almacen_id,
-        a.nombre,
-        mi.fabricante_id,
-        f.nombre
+        p.producto_padre_id,
 
-      HAVING stock <> 0
-      ORDER BY p.codigo_base, p.codigo
+        padre.codigo AS codigo_padre,
+
+        sp.empresa_id,
+        e.nombre AS empresa,
+
+        sp.almacen_id,
+        a.nombre AS almacen,
+
+        sp.fabricante_id,
+        f.nombre AS fabricante,
+
+        sp.cantidad AS stock
+
+      FROM stock_producto sp
+      INNER JOIN productos p ON p.id = sp.producto_id
+      LEFT JOIN productos padre ON padre.id = p.producto_padre_id
+      INNER JOIN empresas e ON e.id = sp.empresa_id
+      INNER JOIN almacenes a ON a.id = sp.almacen_id
+      LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
+
+      WHERE sp.cantidad <> 0
+      ORDER BY codigo_padre, p.codigo, p.codigo_modelo
     `;
 
     const [rows] = await pool.query(sql);
@@ -970,38 +953,43 @@ stockCompleto: async (req, res) => {
     const agrupado = {};
 
     rows.forEach(r => {
-      const base = r.codigo_base || "";
+      // 🔹 DEFINIR CÓDIGO BASE
+      let codigoBase = "";
 
-      if (!agrupado[base]) {
-        agrupado[base] = {
-          codigo_base: base,
+      if (r.producto_padre_id) {
+        // variantes
+        codigoBase = r.codigo_padre;
+      } else if (r.codigo && r.codigo.startsWith("PAÑO")) {
+        // productos simples relacionados
+        codigoBase = "PAÑO_COLOR";
+      }
+
+      if (!agrupado[codigoBase]) {
+        agrupado[codigoBase] = {
+          codigo_base: codigoBase || "",
           stock_total: 0,
           productos: []
         };
       }
 
-      const stock = Number(r.stock);
-
-      agrupado[base].productos.push({
+      agrupado[codigoBase].productos.push({
         producto_id: r.producto_id,
-        codigo_producto: r.codigo_producto,
-        codigo_modelo: r.codigo_modelo,
+        codigo_producto: r.codigo_modelo || r.codigo,
         empresa: r.empresa,
-        almacen: r.almacen || "SIN ALMACÉN",
+        almacen: r.almacen,
         fabricante: r.fabricante || "SIN FABRICANTE",
-        stock
+        stock: Number(r.stock)
       });
 
-      agrupado[base].stock_total += stock;
+      agrupado[codigoBase].stock_total += Number(r.stock);
     });
 
     res.json(Object.values(agrupado));
   } catch (error) {
-    console.error("❌ STOCK COMPLETO MYSQL:", error);
-    res.status(500).json({ error: error.message });
+    console.error("❌ stockCompleto:", error);
+    res.status(500).json({ error: "Error obteniendo stock completo" });
   }
 },
-
   // =====================================================
   // 📜 HISTORIAL POR PRODUCTO
   // =====================================================
