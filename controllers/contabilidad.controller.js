@@ -4,6 +4,36 @@ const { uploadImage } = require("../services/storage.service");
 let pool;
 (async () => (pool = await initDB()))();
 
+
+/* =====================================================
+   🔧 FUNCIÓN LOCAL PARA CÓDIGO BASE (DENTRO DEL CONTROLLER)
+   ===================================================== */
+function obtenerCodigoBaseRobusto(codigo) {
+  if (!codigo) return "";
+
+  // 1️⃣ Si tiene guiones → quitar último bloque
+  if (codigo.includes("-")) {
+    const partes = codigo.split("-");
+    if (partes.length > 1) {
+      return partes.slice(0, -1).join("-");
+    }
+  }
+
+  // 2️⃣ Detectar colores comunes al final
+  // PAÑAZU / PAÑORO / PAÑOVER
+  // ROLLOTRAPAZ / ROLLOTRAPRO
+  const match = codigo.match(
+    /^([A-ZÑ]{3,})(AZ|RO|VE|AN|AM|BL|NG|VD|RS|GR)$/
+  );
+
+  if (match) {
+    return match[1];
+  }
+
+  // 3️⃣ Si no encaja → producto único
+  return codigo;
+}
+
 module.exports = {
   // =====================================================
   // 📦 LISTAR PRODUCTOS
@@ -882,6 +912,42 @@ listarMovimientosPorProducto: async (req, res) => {
   // =====================================================
   // 📦 STOCK POR EMPRESA / ALMACÉN
   // =====================================================
+ stockPorEmpresa: async (req, res) => {
+  const { productoId } = req.query;
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      sp.producto_id,
+      sp.empresa_id,
+      e.nombre AS empresa,
+      sp.almacen_id,
+      a.nombre AS almacen,
+      sp.fabricante_id,
+      f.nombre AS fabricante,
+      sp.cantidad,
+      sp.updated_at
+    FROM stock_producto sp
+    INNER JOIN empresas e ON e.id = sp.empresa_id
+    INNER JOIN almacenes a ON a.id = sp.almacen_id
+    LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
+    WHERE sp.producto_id = ?
+    `,
+    [productoId]
+  );
+
+  res.json(rows);
+},
+
+
+
+
+  // =====================================================
+  // 📦 STOCK COMPLETO AGRUPADO (SIMPLES + VARIANTES)
+  // =====================================================
+// =====================================================
+// 📦 STOCK COMPLETO AGRUPADO (ROBUSTO)
+// =====================================================
 stockCompleto: async (req, res) => {
   try {
     const sql = `
@@ -897,32 +963,29 @@ stockCompleto: async (req, res) => {
         f.nombre AS fabricante,
 
         sp.cantidad AS stock
-
       FROM stock_producto sp
       INNER JOIN productos p ON p.id = sp.producto_id
       LEFT JOIN productos padre ON padre.id = p.producto_padre_id
       INNER JOIN empresas e ON e.id = sp.empresa_id
       INNER JOIN almacenes a ON a.id = sp.almacen_id
       LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
-
       WHERE sp.cantidad <> 0
-      ORDER BY p.codigo
+      ORDER BY codigo_padre, p.codigo, p.codigo_modelo
     `;
 
     const [rows] = await pool.query(sql);
-
     const agrupado = {};
 
     rows.forEach(r => {
       let codigoBase = "";
       let codigoProducto = "";
 
-      // 🔹 VARIANTES REALES
+      // 🔹 VARIANTES (CATÁLOGO)
       if (r.producto_padre_id) {
         codigoBase = r.codigo_padre;
         codigoProducto = r.codigo_modelo;
-      } 
-      // 🔹 SIMPLES ROBUSTOS
+      }
+      // 🔹 PRODUCTOS SIMPLES ROBUSTOS
       else {
         codigoBase = obtenerCodigoBaseRobusto(r.codigo);
         codigoProducto = r.codigo;
@@ -930,7 +993,7 @@ stockCompleto: async (req, res) => {
 
       if (!agrupado[codigoBase]) {
         agrupado[codigoBase] = {
-          codigo_base: codigoBase || "",
+          codigo_base: codigoBase,
           stock_total: 0,
           productos: []
         };
@@ -943,7 +1006,7 @@ stockCompleto: async (req, res) => {
         codigo_producto: codigoProducto,
         empresa: r.empresa,
         almacen: r.almacen,
-        fabricante: r.fabricante || "-",
+        fabricante: r.fabricante || "SIN FABRICANTE",
         stock
       });
 
