@@ -839,7 +839,16 @@ listarMovimientosPorProducto: async (req, res) => {
             AND vm.rol = 'LOGISTICA'
           ORDER BY vm.created_at DESC
           LIMIT 1
-        ) AS usuario_logistica
+        ) AS usuario_logistica,
+
+        (
+          SELECT i.ruta
+          FROM imagenes i
+          WHERE i.movimiento_id = mi.id
+            AND i.tipo = 'almacen'
+          ORDER BY i.created_at DESC
+          LIMIT 1
+        ) AS evidencia_url
 
 
       FROM movimientos_inventario mi
@@ -1772,7 +1781,15 @@ detalleMovimiento: async (req, res) => {
          p.descripcion AS producto,
          e.nombre AS empresa,
          a.nombre AS almacen,
-         f.nombre AS fabricante
+         f.nombre AS fabricante,
+        (
+          SELECT i.ruta
+          FROM imagenes i
+          WHERE i.movimiento_id = m.id
+            AND i.tipo = 'almacen'
+          ORDER BY i.created_at DESC
+          LIMIT 1
+        ) AS evidencia_url
        FROM movimientos_inventario m
        LEFT JOIN usuarios u ON u.id = m.usuario_creador_id
        LEFT JOIN productos p ON p.id = m.producto_id
