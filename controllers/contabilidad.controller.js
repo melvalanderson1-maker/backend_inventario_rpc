@@ -882,39 +882,6 @@ listarMovimientosPorProducto: async (req, res) => {
   // =====================================================
   // 📦 STOCK POR EMPRESA / ALMACÉN
   // =====================================================
- stockPorEmpresa: async (req, res) => {
-  const { productoId } = req.query;
-
-  const [rows] = await pool.query(
-    `
-    SELECT
-      sp.producto_id,
-      sp.empresa_id,
-      e.nombre AS empresa,
-      sp.almacen_id,
-      a.nombre AS almacen,
-      sp.fabricante_id,
-      f.nombre AS fabricante,
-      sp.cantidad,
-      sp.updated_at
-    FROM stock_producto sp
-    INNER JOIN empresas e ON e.id = sp.empresa_id
-    INNER JOIN almacenes a ON a.id = sp.almacen_id
-    LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
-    WHERE sp.producto_id = ?
-    `,
-    [productoId]
-  );
-
-  res.json(rows);
-},
-
-
-
-
-  // =====================================================
-  // 📦 STOCK COMPLETO AGRUPADO (SIMPLES + VARIANTES)
-  // =====================================================
 stockCompleto: async (req, res) => {
   try {
     const sql = `
@@ -923,16 +890,10 @@ stockCompleto: async (req, res) => {
         p.codigo,
         p.codigo_modelo,
         p.producto_padre_id,
-
         padre.codigo AS codigo_padre,
 
-        sp.empresa_id,
         e.nombre AS empresa,
-
-        sp.almacen_id,
         a.nombre AS almacen,
-
-        sp.fabricante_id,
         f.nombre AS fabricante,
 
         sp.cantidad AS stock
@@ -945,7 +906,7 @@ stockCompleto: async (req, res) => {
       LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
 
       WHERE sp.cantidad <> 0
-      ORDER BY codigo_padre, p.codigo, p.codigo_modelo
+      ORDER BY p.codigo
     `;
 
     const [rows] = await pool.query(sql);
@@ -953,15 +914,18 @@ stockCompleto: async (req, res) => {
     const agrupado = {};
 
     rows.forEach(r => {
-      // 🔹 DEFINIR CÓDIGO BASE
       let codigoBase = "";
+      let codigoProducto = "";
 
+      // 🔹 VARIANTES REALES
       if (r.producto_padre_id) {
-        // variantes
         codigoBase = r.codigo_padre;
-      } else if (r.codigo && r.codigo.startsWith("PAÑO")) {
-        // productos simples relacionados
-        codigoBase = "PAÑO_COLOR";
+        codigoProducto = r.codigo_modelo;
+      } 
+      // 🔹 SIMPLES ROBUSTOS
+      else {
+        codigoBase = obtenerCodigoBaseRobusto(r.codigo);
+        codigoProducto = r.codigo;
       }
 
       if (!agrupado[codigoBase]) {
@@ -972,16 +936,18 @@ stockCompleto: async (req, res) => {
         };
       }
 
+      const stock = Number(r.stock);
+
       agrupado[codigoBase].productos.push({
         producto_id: r.producto_id,
-        codigo_producto: r.codigo_modelo || r.codigo,
+        codigo_producto: codigoProducto,
         empresa: r.empresa,
         almacen: r.almacen,
-        fabricante: r.fabricante || "SIN FABRICANTE",
-        stock: Number(r.stock)
+        fabricante: r.fabricante || "-",
+        stock
       });
 
-      agrupado[codigoBase].stock_total += Number(r.stock);
+      agrupado[codigoBase].stock_total += stock;
     });
 
     res.json(Object.values(agrupado));
