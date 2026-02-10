@@ -928,10 +928,10 @@ stockCompleto: async (req, res) => {
         e.nombre AS empresa,
 
         mi.almacen_id,
-        IFNULL(a.nombre, 'SIN ALMACÉN') AS almacen,
+        a.nombre AS almacen,
 
         mi.fabricante_id,
-        IFNULL(f.nombre, 'SIN FABRICANTE') AS fabricante,
+        f.nombre AS fabricante,
 
         SUM(
           CASE
@@ -969,8 +969,8 @@ stockCompleto: async (req, res) => {
 
     const agrupado = {};
 
-    rows.forEach(row => {
-      const base = row.codigo_base || "";
+    rows.forEach(r => {
+      const base = r.codigo_base || "";
 
       if (!agrupado[base]) {
         agrupado[base] = {
@@ -980,22 +980,24 @@ stockCompleto: async (req, res) => {
         };
       }
 
+      const stock = Number(r.stock);
+
       agrupado[base].productos.push({
-        producto_id: row.producto_id,
-        codigo_producto: row.codigo_producto,
-        codigo_modelo: row.codigo_modelo,
-        empresa: row.empresa,
-        almacen: row.almacen,
-        fabricante: row.fabricante,
-        stock: Number(row.stock)
+        producto_id: r.producto_id,
+        codigo_producto: r.codigo_producto,
+        codigo_modelo: r.codigo_modelo,
+        empresa: r.empresa,
+        almacen: r.almacen || "SIN ALMACÉN",
+        fabricante: r.fabricante || "SIN FABRICANTE",
+        stock
       });
 
-      agrupado[base].stock_total += Number(row.stock);
+      agrupado[base].stock_total += stock;
     });
 
     res.json(Object.values(agrupado));
   } catch (error) {
-    console.error("❌ stockCompleto ERROR REAL:", error);
+    console.error("❌ STOCK COMPLETO MYSQL:", error);
     res.status(500).json({ error: error.message });
   }
 },
