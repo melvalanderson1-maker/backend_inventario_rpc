@@ -133,6 +133,12 @@ router.get("/historial", rolMiddleware("ADMIN_LOGISTICA"), ctrl.listarHistorial)
 router.get("/stock-empresa", rolMiddleware("ADMIN_LOGISTICA"), ctrl.stockPorEmpresa);
 router.get("/motivos-rechazo", rolMiddleware("ADMIN_LOGISTICA"), ctrl.listarMotivosRechazo);
 
+
+router.get(
+  "/stock/completo", rolMiddleware("ADMIN_LOGISTICA"), ctrl.stockCompleto);
+
+
+
 // ✅ NUEVAS RUTAS CORRECTAS
 
 
