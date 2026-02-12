@@ -34,6 +34,14 @@ router.get("/movimientos", controller.listarMovimientos);
 router.get("/stock-empresa", controller.stockPorEmpresa);
 router.get("/ops-existentes", controller.listarOpsExistentes);
 
+
+router.get(
+  "/stock/completo",
+   controller.stockCompleto
+);
+
+
+
 router.post(
   "/movimientos/saldo-inicial",
   controller.crearMovimientoSaldoInicial

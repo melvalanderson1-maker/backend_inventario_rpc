@@ -917,6 +917,102 @@ stockPorEmpresa: async (req, res) => {
 },
 
 
+
+// =====================================================
+// 📦 STOCK COMPLETO AGRUPADO (ROBUSTO)
+// =====================================================
+stockCompleto: async (req, res) => {
+  try {
+    const sql = `
+      SELECT
+        p.id AS producto_id,
+        p.codigo,
+        p.codigo_modelo,
+        p.producto_padre_id,
+        padre.codigo AS codigo_padre,
+        c.nombre AS categoria,
+
+        e.nombre AS empresa,
+        a.nombre AS almacen,
+        f.nombre AS fabricante,
+
+        sp.cantidad AS stock,
+        p.created_at
+      FROM stock_producto sp
+      INNER JOIN productos p ON p.id = sp.producto_id
+      LEFT JOIN productos padre ON padre.id = p.producto_padre_id
+      LEFT JOIN categorias c ON c.id = p.categoria_id
+      INNER JOIN empresas e ON e.id = sp.empresa_id
+      INNER JOIN almacenes a ON a.id = sp.almacen_id
+      LEFT JOIN fabricantes f ON f.id = sp.fabricante_id
+      WHERE sp.cantidad <> 0
+      ORDER BY p.created_at DESC
+    `;
+
+    const [rows] = await pool.query(sql);
+
+    // 1️⃣ construir mapa de prefijos
+    const prefijos = {};
+
+    rows.forEach(r => {
+      const base = obtenerCodigoBaseRobusto(r.codigo);
+      if (!prefijos[base]) prefijos[base] = [];
+      prefijos[base].push(r.codigo);
+    });
+
+    // 2️⃣ solo prefijos con MÁS DE 1 producto son grupo
+    const gruposValidos = new Set(
+      Object.keys(prefijos).filter(k => prefijos[k].length > 1)
+    );
+
+    const agrupado = {};
+
+    rows.forEach(r => {
+      let codigoBase = "";
+      let codigoProducto = r.codigo;
+
+      if (r.producto_padre_id) {
+        codigoBase = r.codigo_padre;
+        codigoProducto = r.codigo_modelo;
+      } else {
+        const posibleBase = obtenerCodigoBaseRobusto(r.codigo);
+        if (gruposValidos.has(posibleBase)) {
+          codigoBase = posibleBase;
+        }
+      }
+
+      const key = codigoBase || `UNICO-${r.producto_id}`;
+
+      if (!agrupado[key]) {
+        agrupado[key] = {
+          codigo_base: codigoBase,
+          stock_total: 0,
+          productos: []
+        };
+      }
+
+      const stock = Number(r.stock);
+
+      agrupado[key].productos.push({
+        producto_id: r.producto_id,
+        codigo_producto: codigoProducto,
+        empresa: r.empresa,
+        almacen: r.almacen,
+        fabricante: r.fabricante || "SIN FABRICANTE",
+        categoria: r.categoria || "-",
+        stock
+      });
+
+      agrupado[key].stock_total += stock;
+    });
+
+    res.json(Object.values(agrupado));
+  } catch (error) {
+    console.error("❌ stockCompleto:", error);
+    res.status(500).json({ error: "Error obteniendo stock completo" });
+  }
+},
+
 obtenerPrecioPorStock: async (req, res) => {
   try {
     const { productoId, empresa_id, almacen_id, fabricante_id } = req.query;
