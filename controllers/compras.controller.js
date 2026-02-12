@@ -13,6 +13,36 @@
   (async () => pool = await initDB())();
 
 
+  /* =====================================================
+   🔧 FUNCIÓN LOCAL PARA CÓDIGO BASE (DENTRO DEL CONTROLLER)
+   ===================================================== */
+  function obtenerCodigoBaseRobusto(codigo) {
+    if (!codigo) return "";
+
+    // guiones
+    if (codigo.includes("-")) {
+      const partes = codigo.split("-");
+      if (partes.length > 1) {
+        return partes.slice(0, -1).join("-");
+      }
+    }
+
+    // números + sufijo (.A .R .V)
+    const punto = codigo.match(/^(\d+)\.[A-Z]{1,2}$/);
+    if (punto) return punto[1];
+
+    // colores / variantes
+    const match = codigo.match(
+      /^([A-ZÑ0-9]{3,})(AZ|RO|VE|AN|AM|BL|NG|VD|RS|GR|MO|C|R|V|E)$/
+    );
+
+    if (match) return match[1];
+
+    return codigo;
+  }
+
+
+
   const actualizarStock = async (conn, {
   producto_id,
   empresa_id,
