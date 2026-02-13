@@ -668,11 +668,19 @@ validarMovimiento: async (req, res) => {
     // ===================================================
     // 🖼 IMAGEN (OPCIONAL)
     // ===================================================
-    if (req.file) {
+    // ===================================================
+    // 🖼 IMÁGENES (OBLIGATORIO AL MENOS 1)
+    // ===================================================
+    if (!req.files || req.files.length === 0) {
+      throw new Error("Debe adjuntar al menos una imagen de evidencia");
+    }
+
+    for (const file of req.files) {
       const uploaded = await uploadImage(
-        req.file.buffer,
+        file.buffer,
         `movimientos/${movimientoId}-${Date.now()}`
       );
+
       await conn.query(
         `
         INSERT INTO imagenes
@@ -687,6 +695,7 @@ validarMovimiento: async (req, res) => {
         ]
       );
     }
+
 
     await conn.commit();
     res.json({ ok: true });

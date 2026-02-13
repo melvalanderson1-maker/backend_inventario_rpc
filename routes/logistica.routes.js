@@ -23,7 +23,7 @@ router.get("/pendientes", rolMiddleware("ADMIN_LOGISTICA"), ctrl.listarPendiente
 router.post(
   "/movimientos/:movimientoId/validar",
   rolMiddleware("ADMIN_LOGISTICA"),
-  upload.single("imagen"),
+  upload.array("imagenes", 2),
   ctrl.validarMovimiento
 );
 
