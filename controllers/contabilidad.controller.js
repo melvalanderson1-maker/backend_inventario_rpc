@@ -871,13 +871,16 @@ listarMovimientosPorProducto: async (req, res) => {
         ) AS usuario_logistica,
 
         (
-          SELECT i.ruta
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'url', i.ruta
+            )
+          )
           FROM imagenes i
           WHERE i.movimiento_id = mi.id
             AND i.tipo = 'almacen'
-          ORDER BY i.created_at DESC
-          LIMIT 1
-        ) AS evidencia_url
+        ) AS imagenes
+
 
 
       FROM movimientos_inventario mi
@@ -1911,13 +1914,17 @@ detalleMovimiento: async (req, res) => {
          a.nombre AS almacen,
          f.nombre AS fabricante,
         (
-          SELECT i.ruta
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'url', i.ruta
+            )
+          )
           FROM imagenes i
           WHERE i.movimiento_id = m.id
             AND i.tipo = 'almacen'
-          ORDER BY i.created_at DESC
-          LIMIT 1
-        ) AS evidencia_url
+        ) AS imagenes
+
+
        FROM movimientos_inventario m
        LEFT JOIN usuarios u ON u.id = m.usuario_creador_id
        LEFT JOIN productos p ON p.id = m.producto_id
