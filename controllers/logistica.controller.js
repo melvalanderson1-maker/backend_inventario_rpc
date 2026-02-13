@@ -1211,6 +1211,15 @@ listarMovimientosPorProducto: async (req, res) => {
         f.nombre AS fabricante,
 
         mi.observaciones AS observaciones_compras,
+        (
+          SELECT vm.observaciones
+          FROM validaciones_movimiento vm
+          WHERE vm.movimiento_id = mi.id
+            AND vm.rol = 'LOGISTICA'
+          ORDER BY vm.created_at DESC
+          LIMIT 1
+        ) AS observaciones_logistica,
+
 
         (
           SELECT CONCAT(IFNULL(mrm.nombre, ''), ' - ', IFNULL(vm.observaciones, ''))
