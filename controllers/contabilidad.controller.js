@@ -848,6 +848,8 @@ listarMovimientosPorProducto: async (req, res) => {
         mi.estado,
         mi.created_at AS fecha_creacion,
         mi.fecha_validacion_logistica,
+        mi.cantidad_real,                      -- 🔥 AGREGADO
+        mi.observaciones_contabilidad,         -- 🔥 AGREGADO
 
         p.codigo AS codigo_producto,
         p.codigo_modelo,
