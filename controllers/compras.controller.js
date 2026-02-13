@@ -594,13 +594,16 @@ listarMovimientos: async (req, res) => {
 
         -- 🔥 NUEVO: imagen de evidencia del movimiento
         (
-          SELECT i.ruta
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'url', i.ruta
+            )
+          )
           FROM imagenes i
           WHERE i.movimiento_id = mi.id
             AND i.tipo = 'almacen'
-          ORDER BY i.created_at DESC
-          LIMIT 1
-        ) AS evidencia_url
+        ) AS imagenes
+
 
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
