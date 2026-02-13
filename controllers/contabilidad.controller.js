@@ -441,6 +441,10 @@ validarMovimiento: async (req, res) => {
       throw new Error("Debe guardar cantidad real antes de validar");
     }
 
+    if (!mov.observaciones_contabilidad?.trim()) {
+      throw new Error("Debe ingresar observaciones contables antes de validar");
+    }
+
     // ===================================================
     // 📦 DETERMINAR ALMACÉN FINAL
     // ===================================================
@@ -500,6 +504,10 @@ rechazarMovimientoContabilidad: async (req, res) => {
 
     if (!observaciones?.trim()) {
       return res.status(400).json({ error: "Debe ingresar observaciones del rechazo" });
+    }
+
+    if (!mov.cantidad_real || mov.cantidad_real <= 0) {
+      return res.status(400).json({ error: "Debe guardar cantidad real antes de rechazar" });
     }
 
     const [result] = await pool.query(
@@ -1899,6 +1907,24 @@ rechazarMovimiento: async (req, res) => {
 },
 
 // =====================================================
+// ✅ EIVDENICA Y IMAGEN DE CONTABILIDAD IMÁGENES)
+// =====================================================
+
+subirEvidenciaContabilidad: async (req, res) => {
+  const { id } = req.params;
+
+  for (const file of req.files) {
+    await pool.query(
+      `INSERT INTO imagenes (movimiento_id, ruta, tipo)
+       VALUES (?, ?, 'contabilidad')`,
+      [id, file.path]
+    );
+  }
+
+  res.json({ ok: true });
+},
+
+// =====================================================
 // ✅ DETALLE MOVIMIENTO (CON AUDITORÍA Y IMÁGENES)
 // =====================================================
 detalleMovimiento: async (req, res) => {
@@ -1916,13 +1942,14 @@ detalleMovimiento: async (req, res) => {
         (
           SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
-              'url', i.ruta
+              'url', i.ruta,
+              'tipo', i.tipo
             )
           )
           FROM imagenes i
           WHERE i.movimiento_id = m.id
-            AND i.tipo = 'almacen'
         ) AS imagenes
+
 
 
        FROM movimientos_inventario m
@@ -2009,5 +2036,45 @@ guardarCantidadReal: async (req, res) => {
     res.status(500).json({ ok: false, error: error.message });
   }
 },
+
+
+guardarGeneralContabilidad: async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { cantidad_real, observaciones_contabilidad } = req.body;
+    const usuarioId = req.user.id;
+
+    if (!cantidad_real || cantidad_real <= 0) {
+      return res.status(400).json({ error: "Cantidad real obligatoria" });
+    }
+
+    if (!observaciones_contabilidad?.trim()) {
+      return res.status(400).json({ error: "Observaciones obligatorias" });
+    }
+
+    await pool.query(
+      `UPDATE movimientos_inventario
+       SET cantidad_real = ?,
+           observaciones_contabilidad = ?,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [cantidad_real, observaciones_contabilidad.trim(), id]
+    );
+
+    await pool.query(
+      `INSERT INTO validaciones_movimiento
+       (movimiento_id, rol, usuario_id, accion, observaciones)
+       VALUES (?, 'CONTABILIDAD', ?, 'ACTUALIZACION', ?)`,
+      [id, usuarioId, 'Guardado general contabilidad']
+    );
+
+    res.json({ ok: true, msg: "Guardado correctamente" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Error guardando" });
+  }
+},
+
 
 };

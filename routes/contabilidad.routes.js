@@ -168,10 +168,26 @@ router.get(
 
 // ✅ DETALLE DE MOVIMIENTO
 router.get("/movimientos/:id/detalle", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl.detalleMovimiento);
+
+
+router.post(
+  "/movimientos/:id/guardar-general",
+  rolMiddleware("ADMIN_CONTABILIDAD"),
+  ctrl.guardarGeneralContabilidad
+);
+
+
 router.post(
   "/movimientos/:id/guardar-cantidad-real",
   rolMiddleware("ADMIN_CONTABILIDAD"),
   ctrl.guardarCantidadReal
+);
+
+
+router.post(
+  "/movimientos/:id/subir-evidencia",
+  upload.array("imagenes"),
+  ctrl.subirEvidenciaContabilidad
 );
 
 
