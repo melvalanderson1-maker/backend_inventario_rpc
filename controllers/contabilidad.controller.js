@@ -1914,17 +1914,20 @@ rechazarMovimiento: async (req, res) => {
 
 subirEvidenciaContabilidad: async (req, res) => {
   const { id } = req.params;
+  const imagenesInsertadas = [];
 
   for (const file of req.files) {
-    await pool.query(
-      `INSERT INTO imagenes (movimiento_id, ruta, tipo)
-       VALUES (?, ?, 'contabilidad')`,
-      [id, file.path]
+    const result = await pool.query(
+      `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
+       VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
+      [id, file.path, file.filename || file.originalname]
     );
+    imagenesInsertadas.push({ ruta: file.path });
   }
 
-  res.json({ ok: true });
+  res.json({ ok: true, imagenes: imagenesInsertadas });
 },
+
 
 // =====================================================
 // ✅ DETALLE MOVIMIENTO (CON AUDITORÍA Y IMÁGENES)
