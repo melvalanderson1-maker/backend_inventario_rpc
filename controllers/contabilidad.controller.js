@@ -1913,20 +1913,36 @@ rechazarMovimiento: async (req, res) => {
 // =====================================================
 
 subirEvidenciaContabilidad: async (req, res) => {
-  const { id } = req.params;
-  const imagenesInsertadas = [];
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ ok: false, error: "No se enviaron imágenes" });
+    }
 
-  for (const file of req.files) {
-    const result = await pool.query(
-      `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
-       VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
-      [id, file.path, file.filename || file.originalname]
-    );
-    imagenesInsertadas.push({ ruta: file.path });
+    const imagenesInsertadas = [];
+
+    for (const file of req.files) {
+      // Aquí subes a Cloudinary
+      const result = await cloudinary.uploader.upload(file.path || file.buffer, {
+        folder: "evidencias_contabilidad",
+        resource_type: "image",
+      });
+
+      const [dbResult] = await pool.query(
+        `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
+         VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
+        [req.params.id, result.secure_url, file.originalname]
+      );
+
+      imagenesInsertadas.push({ ruta: result.secure_url });
+    }
+
+    res.json({ ok: true, imagenes: imagenesInsertadas });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message });
   }
-
-  res.json({ ok: true, imagenes: imagenesInsertadas });
 },
+
 
 
 // =====================================================
