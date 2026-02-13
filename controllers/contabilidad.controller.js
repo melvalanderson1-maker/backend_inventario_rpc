@@ -1,5 +1,6 @@
 const { initDB } = require("../config/db");
-const { uploadImage } = require("../services/storage.service");
+
+const { uploadImage } = require("../services/storage.service"); // tu función cloud
 
 let pool;
 (async () => (pool = await initDB()))();
@@ -2099,25 +2100,21 @@ guardarGeneralContabilidad: async (req, res) => {
     const imagenesInsertadas = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const data = file.buffer || file.path;
-        if (!data) throw new Error("Archivo inválido");
-
-        const result = await cloudinary.uploader.upload(data, {
-          folder: "evidencias_contabilidad",
-          resource_type: "image",
-        });
+        const storagePath = `evidencias_contabilidad/movimiento_${id}/${file.originalname}`;
+        await uploadImage(file.buffer, storagePath); // tu servicio cloud
 
         await pool.query(
           `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
            VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
-          [id, result.secure_url, result.public_id]
+          [id, storagePath, storagePath]
         );
 
-        imagenesInsertadas.push({ ruta: result.secure_url });
+        imagenesInsertadas.push({ ruta: storagePath });
       }
     }
 
     res.json({ ok: true, msg: "Guardado correctamente", imagenes: imagenesInsertadas });
+
   } catch (error) {
     console.error("guardarGeneralContabilidad:", error);
     res.status(500).json({ error: "Error guardando" });

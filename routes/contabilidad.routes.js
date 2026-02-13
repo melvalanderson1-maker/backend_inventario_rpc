@@ -176,7 +176,7 @@ router.get("/movimientos/:id/detalle", rolMiddleware("ADMIN_CONTABILIDAD"), ctrl
 router.post(
   "/movimientos/:id/guardar-general",
   rolMiddleware("ADMIN_CONTABILIDAD"),
-  upload.array("imagenes", 5),
+  upload.array("imagenes"),
   ctrl.guardarGeneralContabilidad
 );
 
