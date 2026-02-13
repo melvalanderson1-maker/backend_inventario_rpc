@@ -5,6 +5,9 @@ const ctrl = require("../controllers/contabilidad.controller");
 const auth = require("../middlewares/authMiddleware");
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
+const upload = require("../middlewares/upload");
+
+
 // ✅ primero auth
 router.use(auth);
 // =====================
