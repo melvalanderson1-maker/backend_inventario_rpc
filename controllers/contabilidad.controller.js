@@ -2,7 +2,7 @@ const { initDB } = require("../config/db");
 
 const { uploadImage } = require("../services/storage.service"); // tu función cloud
 
-const { resolveImageUrl } = require('./utils/resolveImageUrl'); // o donde esté tu archivo
+const { resolveImageUrl } = require("../utils/imageUrl"); // o donde esté tu archivo
 
 
 let pool;
