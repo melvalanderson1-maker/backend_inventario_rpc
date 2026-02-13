@@ -1921,16 +1921,20 @@ subirEvidenciaContabilidad: async (req, res) => {
     const imagenesInsertadas = [];
 
     for (const file of req.files) {
-      // Aquí subes a Cloudinary
-      const result = await cloudinary.uploader.upload(file.path || file.buffer, {
+      // Subir usando buffer si usas memoryStorage
+      const data = file.buffer || file.path;
+      if (!data) throw new Error("Archivo inválido");
+
+      const result = await cloudinary.uploader.upload(data, {
         folder: "evidencias_contabilidad",
         resource_type: "image",
       });
 
-      const [dbResult] = await pool.query(
+      // Insertar con public_id real
+      await pool.query(
         `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
          VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
-        [req.params.id, result.secure_url, file.originalname]
+        [req.params.id, result.secure_url, result.public_id]
       );
 
       imagenesInsertadas.push({ ruta: result.secure_url });
@@ -1938,7 +1942,7 @@ subirEvidenciaContabilidad: async (req, res) => {
 
     res.json({ ok: true, imagenes: imagenesInsertadas });
   } catch (err) {
-    console.error(err);
+    console.error("subirEvidenciaContabilidad:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 },
@@ -2058,13 +2062,13 @@ guardarCantidadReal: async (req, res) => {
   }
 },
 
-
 guardarGeneralContabilidad: async (req, res) => {
   try {
     const { id } = req.params;
     const { cantidad_real, observaciones_contabilidad } = req.body;
     const usuarioId = req.user.id;
 
+    // Validaciones
     if (!cantidad_real || cantidad_real <= 0) {
       return res.status(400).json({ error: "Cantidad real obligatoria" });
     }
@@ -2073,6 +2077,7 @@ guardarGeneralContabilidad: async (req, res) => {
       return res.status(400).json({ error: "Observaciones obligatorias" });
     }
 
+    // 1️⃣ Actualizamos cantidad y observaciones
     await pool.query(
       `UPDATE movimientos_inventario
        SET cantidad_real = ?,
@@ -2082,6 +2087,7 @@ guardarGeneralContabilidad: async (req, res) => {
       [cantidad_real, observaciones_contabilidad.trim(), id]
     );
 
+    // 2️⃣ Insertar registro de validación
     await pool.query(
       `INSERT INTO validaciones_movimiento
        (movimiento_id, rol, usuario_id, accion, observaciones)
@@ -2089,10 +2095,31 @@ guardarGeneralContabilidad: async (req, res) => {
       [id, usuarioId, 'Guardado general contabilidad']
     );
 
-    res.json({ ok: true, msg: "Guardado correctamente" });
+    // 3️⃣ Subir imágenes si vienen archivos
+    const imagenesInsertadas = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const data = file.buffer || file.path;
+        if (!data) throw new Error("Archivo inválido");
 
+        const result = await cloudinary.uploader.upload(data, {
+          folder: "evidencias_contabilidad",
+          resource_type: "image",
+        });
+
+        await pool.query(
+          `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
+           VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
+          [id, result.secure_url, result.public_id]
+        );
+
+        imagenesInsertadas.push({ ruta: result.secure_url });
+      }
+    }
+
+    res.json({ ok: true, msg: "Guardado correctamente", imagenes: imagenesInsertadas });
   } catch (error) {
-    console.error(error);
+    console.error("guardarGeneralContabilidad:", error);
     res.status(500).json({ error: "Error guardando" });
   }
 },
