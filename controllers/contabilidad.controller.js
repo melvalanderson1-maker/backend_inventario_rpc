@@ -2,6 +2,9 @@ const { initDB } = require("../config/db");
 
 const { uploadImage } = require("../services/storage.service"); // tu función cloud
 
+const { resolveImageUrl } = require('./utils/resolveImageUrl'); // o donde esté tu archivo
+
+
 let pool;
 (async () => (pool = await initDB()))();
 
@@ -1938,7 +1941,14 @@ subirEvidenciaContabilidad: async (req, res) => {
         [req.params.id, result.secure_url, result.public_id]
       );
 
-      imagenesInsertadas.push({ ruta: result.secure_url });
+      imagenesInsertadas.push({
+        ruta: storagePath,
+        url: resolveImageUrl({
+          storage_provider: 'cloudinary',
+          storage_key: storagePath
+        })
+      });
+
     }
 
     res.json({ ok: true, imagenes: imagenesInsertadas });
