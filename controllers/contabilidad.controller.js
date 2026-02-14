@@ -2,7 +2,7 @@ const { initDB } = require("../config/db");
 
 const { uploadImage } = require("../services/storage.service"); // tu función cloud
 
-const { resolveImageUrl } = require("../utils/imageUrl"); // o donde esté tu archivo
+
 
 
 let pool;
@@ -1984,7 +1984,18 @@ detalleMovimiento: async (req, res) => {
           )
           FROM imagenes i
           WHERE i.movimiento_id = m.id
-        ) AS imagenes
+        ) AS imagenes,
+
+        (
+          SELECT JSON_ARRAYAGG(
+            JSON_OBJECT(
+              'url', i.ruta
+            )
+          )
+          FROM imagenes i
+          WHERE i.movimiento_id = mi.id
+            AND i.tipo = 'contabilidad'
+        ) AS imagenes_contabilidad
 
 
 
@@ -2073,63 +2084,103 @@ guardarCantidadReal: async (req, res) => {
   }
 },
 
-guardarGeneralContabilidad: async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { cantidad_real, observaciones_contabilidad } = req.body;
-    const usuarioId = req.user.id;
+guardarGeneralMovimiento: async (req, res) => {
+  const conn = await pool.getConnection();
 
-    // Validaciones
-    if (!cantidad_real || cantidad_real <= 0) {
-      return res.status(400).json({ error: "Cantidad real obligatoria" });
+  try {
+    await conn.beginTransaction();
+
+    const { movimientoId } = req.params;
+    const usuarioId = req.user.id;
+    const { cantidad_real, observaciones_contabilidad } = req.body;
+
+    if (!cantidad_real || Number(cantidad_real) <= 0) {
+      throw new Error("Cantidad real inválida");
     }
 
     if (!observaciones_contabilidad?.trim()) {
-      return res.status(400).json({ error: "Observaciones obligatorias" });
+      throw new Error("Observaciones obligatorias");
     }
 
-    // 1️⃣ Actualizamos cantidad y observaciones
-    await pool.query(
-      `UPDATE movimientos_inventario
-       SET cantidad_real = ?,
-           observaciones_contabilidad = ?,
-           updated_at = NOW()
-       WHERE id = ?`,
-      [cantidad_real, observaciones_contabilidad.trim(), id]
+    // 🔒 Bloquear movimiento
+    const [[mov]] = await conn.query(
+      `SELECT * FROM movimientos_inventario WHERE id = ? FOR UPDATE`,
+      [movimientoId]
     );
 
-    // 2️⃣ Insertar registro de validación
-    await pool.query(
-      `INSERT INTO validaciones_movimiento
-       (movimiento_id, rol, usuario_id, accion, observaciones)
-       VALUES (?, 'CONTABILIDAD', ?, 'ACTUALIZACION', ?)`,
-      [id, usuarioId, 'Guardado general contabilidad']
-    );
+    if (!mov) throw new Error("Movimiento no encontrado");
 
-    // 3️⃣ Subir imágenes si vienen archivos
-    const imagenesInsertadas = [];
+    // ===================================================
+    // 🖼 SUBIR IMÁGENES CONTABILIDAD
+    // ===================================================
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const storagePath = `evidencias_contabilidad/movimiento_${id}/${file.originalname}`;
-        await uploadImage(file.buffer, storagePath); // tu servicio cloud
-
-        await pool.query(
-          `INSERT INTO imagenes (movimiento_id, producto_id, ruta, tipo, storage_key, storage_provider)
-           VALUES (?, NULL, ?, 'contabilidad', ?, 'cloudinary')`,
-          [id, storagePath, storagePath]
+        const uploaded = await uploadImage(
+          file.buffer,
+          `movimientos-contabilidad/${movimientoId}-${Date.now()}`
         );
 
-        imagenesInsertadas.push({ ruta: storagePath });
+        await conn.query(
+          `
+          INSERT INTO imagenes
+          (movimiento_id, tipo, ruta, storage_key, storage_provider)
+          VALUES (?, 'contabilidad', ?, ?, ?)
+          `,
+          [
+            movimientoId,
+            uploaded.url,
+            uploaded.storage_key,
+            uploaded.storage_provider,
+          ]
+        );
       }
     }
 
-    res.json({ ok: true, msg: "Guardado correctamente", imagenes: imagenesInsertadas });
+    // ===================================================
+    // 📝 Guardar datos contables
+    // ===================================================
+    await conn.query(
+      `
+      UPDATE movimientos_inventario
+      SET
+        cantidad_real = ?,
+        observaciones_contabilidad = ?
+      WHERE id = ?
+      `,
+      [cantidad_real, observaciones_contabilidad.trim(), movimientoId]
+    );
+
+    await conn.commit();
+
+    // 🔥 Devolver imágenes actualizadas
+    const [imagenes] = await conn.query(
+      `
+      SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'url', ruta
+        )
+      ) AS imagenes
+      FROM imagenes
+      WHERE movimiento_id = ?
+        AND tipo = 'contabilidad'
+      `,
+      [movimientoId]
+    );
+
+    res.json({
+      ok: true,
+      imagenes: imagenes[0].imagenes
+        ? JSON.parse(imagenes[0].imagenes)
+        : [],
+    });
 
   } catch (error) {
-    console.error("guardarGeneralContabilidad:", error);
-    res.status(500).json({ error: "Error guardando" });
+    await conn.rollback();
+    console.error("❌ guardarGeneralMovimiento:", error);
+    res.status(400).json({ error: error.message });
+  } finally {
+    conn.release();
   }
 },
-
 
 };
