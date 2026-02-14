@@ -1985,7 +1985,7 @@ detalleMovimiento: async (req, res) => {
           FROM imagenes i
           WHERE i.movimiento_id = m.id
             AND i.tipo = 'almacen'
-        ) AS imagenes
+        ) AS imagenes,
 
         (
           SELECT JSON_ARRAYAGG(
