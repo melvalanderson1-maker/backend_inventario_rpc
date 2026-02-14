@@ -1975,16 +1975,17 @@ detalleMovimiento: async (req, res) => {
          e.nombre AS empresa,
          a.nombre AS almacen,
          f.nombre AS fabricante,
+        -- 🔥 NUEVO: imagen de evidencia del movimiento
         (
           SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
-              'url', i.ruta,
-              'tipo', i.tipo
+              'url', i.ruta
             )
           )
           FROM imagenes i
           WHERE i.movimiento_id = m.id
-        ) AS imagenes,
+            AND i.tipo = 'almacen'
+        ) AS imagenes
 
         (
           SELECT JSON_ARRAYAGG(
