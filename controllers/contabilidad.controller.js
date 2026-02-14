@@ -1993,7 +1993,7 @@ detalleMovimiento: async (req, res) => {
             )
           )
           FROM imagenes i
-          WHERE i.movimiento_id = mi.id
+          WHERE i.movimiento_id = m.id
             AND i.tipo = 'contabilidad'
         ) AS imagenes_contabilidad
 
