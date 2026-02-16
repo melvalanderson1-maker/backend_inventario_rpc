@@ -2035,10 +2035,12 @@ detalleMovimiento: async (req, res) => {
     res.json({
       ...movimiento,
       usuario_logistica: logistica.usuario || null,
-      
       observacion_logistica: logistica.observaciones || null,
-      observacion_contabilidad: contabilidad.observaciones || null,
-      motivo_contabilidad: movimiento.motivo_contabilidad || null, // 🔥 CLAVE
+
+      // 🔥 YA VIENE DESDE movimientos_inventario
+      observacion_contabilidad: movimiento.observaciones_contabilidad || null,
+      motivo_contabilidad: movimiento.motivo_contabilidad || null,
+
       validaciones,
     });
   } catch (error) {
