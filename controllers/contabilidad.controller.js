@@ -2087,6 +2087,8 @@ guardarCantidadReal: async (req, res) => {
 
 guardarGeneralMovimiento: async (req, res) => {
   const conn = await pool.getConnection();
+  console.log("REQ.USER COMPLETO:", req.user);
+  console.log("USUARIO ID:", req.user?.id);
 
   try {
     await conn.beginTransaction();
