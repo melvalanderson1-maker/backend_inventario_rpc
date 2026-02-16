@@ -2152,18 +2152,18 @@ guardarGeneralMovimiento: async (req, res) => {
       SET
         cantidad_real = ?,
         observaciones_contabilidad = ?,
-        usuario_contabilidad_id = ?        -- 🔥 AQUI
-
+        usuario_contabilidad_id = ?,
+        fecha_validacion_contabilidad = NOW()   -- 🔥 AQUI
       WHERE id = ?
       `,
       [
         cantidad_real,
         observaciones_contabilidad.trim(),
-        usuarioId,        // 🔥 AQUI
+        usuarioId,
         movimientoId
       ]
     );
-
+    
     await conn.commit();
 
     // 🔥 Devolver imágenes actualizadas
