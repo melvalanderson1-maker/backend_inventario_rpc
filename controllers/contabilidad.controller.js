@@ -1971,6 +1971,7 @@ detalleMovimiento: async (req, res) => {
       `SELECT 
          m.*,
          u.nombre AS usuario_creador,
+         uc.nombre AS usuario_contabilidad,   -- 🔥 AQUI
          p.descripcion AS producto,
          e.nombre AS empresa,
          a.nombre AS almacen,
@@ -2001,6 +2002,7 @@ detalleMovimiento: async (req, res) => {
 
 
        FROM movimientos_inventario m
+       LEFT JOIN usuarios uc ON uc.id = m.usuario_contabilidad_id
        LEFT JOIN usuarios u ON u.id = m.usuario_creador_id
        LEFT JOIN productos p ON p.id = m.producto_id
        LEFT JOIN empresas e ON e.id = m.empresa_id
@@ -2028,12 +2030,12 @@ detalleMovimiento: async (req, res) => {
     );
 
     const logistica = validaciones.find(v => v.rol === "LOGISTICA") || {};
-    const contabilidad = validaciones.find(v => v.rol === "CONTABILIDAD") || {};
+    
 
     res.json({
       ...movimiento,
       usuario_logistica: logistica.usuario || null,
-      usuario_contabilidad: contabilidad.usuario || null,
+      
       observacion_logistica: logistica.observaciones || null,
       observacion_contabilidad: contabilidad.observaciones || null,
       motivo_contabilidad: movimiento.motivo_contabilidad || null, // 🔥 CLAVE
