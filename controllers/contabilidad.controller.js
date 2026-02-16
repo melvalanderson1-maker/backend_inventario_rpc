@@ -2163,8 +2163,21 @@ guardarGeneralMovimiento: async (req, res) => {
         movimientoId
       ]
     );
-    
+
     await conn.commit();
+
+    // 🔥 TRAER DATOS ACTUALIZADOS
+    const [[movActualizado]] = await conn.query(
+      `
+      SELECT 
+        m.fecha_validacion_contabilidad,
+        u.nombre AS usuario_contabilidad
+      FROM movimientos_inventario m
+      LEFT JOIN usuarios u ON u.id = m.usuario_contabilidad_id
+      WHERE m.id = ?
+      `,
+      [movimientoId]
+    );
 
     // 🔥 Devolver imágenes actualizadas
     const [imagenes] = await conn.query(
@@ -2186,6 +2199,8 @@ guardarGeneralMovimiento: async (req, res) => {
       imagenes: imagenes[0].imagenes
         ? JSON.parse(imagenes[0].imagenes)
         : [],
+      usuario_contabilidad: movActualizado.usuario_contabilidad,
+      fecha_validacion_contabilidad: movActualizado.fecha_validacion_contabilidad
     });
 
   } catch (error) {
