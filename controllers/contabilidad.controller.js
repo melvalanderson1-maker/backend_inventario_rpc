@@ -2145,10 +2145,18 @@ guardarGeneralMovimiento: async (req, res) => {
       UPDATE movimientos_inventario
       SET
         cantidad_real = ?,
-        observaciones_contabilidad = ?
+        observaciones_contabilidad = ?,
+        usuario_contabilidad_id = ?,         -- 🔥 AQUI
+        fecha_validacion_contabilidad = NOW(), -- 🔥 opcional pero recomendado
+        estado = 'FINALIZADO_CONTABILIDAD'   -- 🔥 si manejas estados
       WHERE id = ?
       `,
-      [cantidad_real, observaciones_contabilidad.trim(), movimientoId]
+      [
+        cantidad_real,
+        observaciones_contabilidad.trim(),
+        usuarioId,        // 🔥 AQUI
+        movimientoId
+      ]
     );
 
     await conn.commit();
