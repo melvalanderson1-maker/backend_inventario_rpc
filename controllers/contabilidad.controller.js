@@ -2117,22 +2117,30 @@ guardarGeneralMovimiento: async (req, res) => {
 
     if (!mov) throw new Error("Movimiento no encontrado");
 
+    // 🔥 VALIDACIÓN ANTI DOBLE GUARDADO
+    if (mov.usuario_contabilidad_id) {
+      throw new Error("Movimiento ya fue validado por contabilidad");
+    }
+
     // ===================================================
     // 🖼 SUBIR IMÁGENES CONTABILIDAD
     // ===================================================
     if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const uploaded = await uploadImage(
-          file.buffer,
-          `movimientos-contabilidad/${movimientoId}-${Date.now()}`
-        );
 
+      const uploads = await Promise.all(
+        req.files.map(file =>
+          uploadImage(
+            file.buffer,
+            `movimientos-contabilidad/${movimientoId}-${Date.now()}`
+          )
+        )
+      );
+
+      for (const uploaded of uploads) {
         await conn.query(
-          `
-          INSERT INTO imagenes
+          `INSERT INTO imagenes
           (movimiento_id, tipo, ruta, storage_key, storage_provider)
-          VALUES (?, 'contabilidad', ?, ?, ?)
-          `,
+          VALUES (?, 'contabilidad', ?, ?, ?)`,
           [
             movimientoId,
             uploaded.url,
