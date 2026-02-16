@@ -2146,9 +2146,8 @@ guardarGeneralMovimiento: async (req, res) => {
       SET
         cantidad_real = ?,
         observaciones_contabilidad = ?,
-        usuario_contabilidad_id = ?,         -- 🔥 AQUI
-        fecha_validacion_contabilidad = NOW(), -- 🔥 opcional pero recomendado
-        estado = 'FINALIZADO_CONTABILIDAD'   -- 🔥 si manejas estados
+        usuario_contabilidad_id = ?        -- 🔥 AQUI
+
       WHERE id = ?
       `,
       [
