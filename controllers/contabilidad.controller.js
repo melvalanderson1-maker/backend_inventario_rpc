@@ -500,8 +500,6 @@ validarMovimiento: async (req, res) => {
 
 rechazarMovimientoContabilidad: async (req, res) => {
   try {
-    console.log("🧪 BODY:", req.body);
-
     const { movimientoId } = req.params;
     const { observaciones } = req.body;
     const usuarioId = req.user.id;
@@ -510,10 +508,24 @@ rechazarMovimientoContabilidad: async (req, res) => {
       return res.status(400).json({ error: "Debe ingresar observaciones del rechazo" });
     }
 
+    // ✅ 1. Buscar movimiento
+    const [rows] = await pool.query(
+      "SELECT * FROM movimientos_inventario WHERE id = ?",
+      [movimientoId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "Movimiento no encontrado" });
+    }
+
+    const mov = rows[0];
+
+    // ✅ 2. Validar cantidad_real
     if (!mov.cantidad_real || mov.cantidad_real <= 0) {
       return res.status(400).json({ error: "Debe guardar cantidad real antes de rechazar" });
     }
 
+    // ✅ 3. Actualizar
     const [result] = await pool.query(
       `
       UPDATE movimientos_inventario
@@ -527,12 +539,11 @@ rechazarMovimientoContabilidad: async (req, res) => {
       [usuarioId, observaciones.trim(), movimientoId]
     );
 
-    console.log("🧪 affectedRows:", result.affectedRows);
-
     if (!result.affectedRows) {
       return res.status(404).json({ error: "Movimiento no encontrado" });
     }
 
+    // ✅ 4. Insertar historial
     await pool.query(
       `
       INSERT INTO validaciones_movimiento
@@ -548,7 +559,6 @@ rechazarMovimientoContabilidad: async (req, res) => {
     res.status(500).json({ error: "Error rechazando movimiento" });
   }
 },
-
 
 
 
