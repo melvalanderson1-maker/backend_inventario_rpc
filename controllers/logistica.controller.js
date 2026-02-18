@@ -542,10 +542,38 @@ validarMovimiento: async (req, res) => {
       ]
     );
 
+
     // ===================================================
-    // 📥 ENTRADA / SALDO INICIAL / AJUSTE
+    // 📥 SALDO INICIAL → REEMPLAZA STOCK
     // ===================================================
-    if (["ENTRADA", "SALDO_INICIAL", "AJUSTE"].includes(tipo)) {
+    if (tipo === "SALDO_INICIAL") {
+      if (stockRow) {
+        await conn.query(
+          `UPDATE stock_producto SET cantidad = ? WHERE id = ?`,
+          [cantidadReal, stockRow.id]
+        );
+      } else {
+        await conn.query(
+          `
+          INSERT INTO stock_producto
+          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad)
+          VALUES (?,?,?,?,?)
+          `,
+          [
+            mov.producto_id,
+            mov.empresa_id,
+            almacenFinal,
+            mov.fabricante_id || null,
+            cantidadReal,
+          ]
+        );
+      }
+    }
+
+    // ===================================================
+    // 📥 ENTRADA / AJUSTE → SUMAN
+    // ===================================================
+    if (["ENTRADA", "AJUSTE"].includes(tipo)) {
       if (stockRow) {
         await conn.query(
           `UPDATE stock_producto SET cantidad = cantidad + ? WHERE id = ?`,
