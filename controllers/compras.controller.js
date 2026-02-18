@@ -1580,7 +1580,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
         precio ? Number(precio) : null,
         motivo_id || null,
         observaciones || null,
-        "VALIDADO_LOGISTICA",
+        "PENDIENTE_LOGISTICA",
         usuarioId,
         0,
         0
