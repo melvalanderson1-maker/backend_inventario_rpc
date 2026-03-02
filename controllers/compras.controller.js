@@ -2250,18 +2250,6 @@ confirmarEliminacionProducto: async (req, res) => {
       return res.status(400).json({ error: "Código inválido o expirado" });
     }
 
-    // 2️⃣ verificar movimientos
-    const [[movs]] = await conn.query(
-      "SELECT COUNT(*) total FROM movimientos_inventario WHERE producto_id = ?",
-      [id]
-    );
-
-    if (tipo === "fisico" && movs.total > 0) {
-      await conn.rollback();
-      return res.status(409).json({
-        error: "No se puede eliminar físicamente: tiene movimientos"
-      });
-    }
 
     // 3️⃣ ejecutar acción
     if (tipo === "inactivar") {
@@ -2284,12 +2272,21 @@ confirmarEliminacionProducto: async (req, res) => {
       );
     }
 
-    if (tipo === "fisico") {
-      await conn.query("DELETE FROM imagenes WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM movimientos_inventario WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM productos WHERE id = ?", [id]);
-    }
+  if (tipo === "fisico") {
+
+    // 1️⃣ hijos (variantes)
+    await conn.query("DELETE FROM productos WHERE producto_padre_id = ?", [id]);
+
+    // 2️⃣ tablas dependientes
+    await conn.query("DELETE FROM imagenes WHERE producto_id = ?", [id]);
+    await conn.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
+    await conn.query("DELETE FROM cambios_almacen WHERE producto_id = ?", [id]);
+    await conn.query("DELETE FROM movimientos_inventario WHERE producto_id = ?", [id]);
+    await conn.query("DELETE FROM stock_producto WHERE producto_id = ?", [id]);
+
+    // 3️⃣ finalmente el producto
+    await conn.query("DELETE FROM productos WHERE id = ?", [id]);
+  }
 
     // 4️⃣ marcar token usado
     await conn.query(
