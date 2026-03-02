@@ -2298,10 +2298,14 @@ confirmarEliminacionProducto: async (req, res) => {
     res.json({ mensaje: "Acción ejecutada correctamente" });
 
   } catch (error) {
-    await conn.rollback();
-    console.error("❌ confirmarEliminacionProducto:", error);
-    res.status(500).json({ error: "Error al eliminar producto" });
-  } finally {
+  await conn.rollback();
+  console.error("❌ confirmarEliminacionProducto:", error);
+
+  return res.status(500).json({
+    error: "Error al eliminar producto",
+    detalle: error.message   // 👈 AGREGAR ESTO
+  });
+  }finally {
     conn.release();
   }
 },
