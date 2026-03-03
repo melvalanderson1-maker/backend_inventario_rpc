@@ -1,0 +1,133 @@
+const router = require("express").Router();
+const controller = require("../controllers/compras.controller");
+const auth = require("../middlewares/authMiddleware");
+const { rolMiddleware } = require("../middlewares/rolMiddleware");
+const upload = require("../middlewares/upload");
+
+router.use(auth);
+router.use(rolMiddleware("ADMIN_VENTAS"));
+
+router.get("/productos", controller.listarProductos);
+router.get("/productos/:id", controller.obtenerProducto);
+router.get("/categorias", controller.listarCategorias);
+
+router.get("/productos/:id/atributos", controller.obtenerAtributosProducto);
+
+
+
+
+
+router.post(
+  "/productos",
+  upload.any(),       // 👈 AQUÍ SE LEEN LAS IMÁGENES
+  controller.crearProducto
+);
+
+router.post("/movimientos/entrada", controller.crearMovimientoEntrada);
+
+router.post("/movimientos/salida", controller.crearMovimientoSalida);
+
+
+
+router.get("/movimientos", controller.listarMovimientos);
+
+router.get("/stock-empresa", controller.stockPorEmpresa);
+router.get("/ops-existentes", controller.listarOpsExistentes);
+
+
+router.get(
+  "/stock/completo",
+   controller.stockCompleto
+);
+
+
+
+router.post(
+  "/movimientos/saldo-inicial",
+  controller.crearMovimientoSaldoInicial
+);
+
+router.get("/stock-por-producto/:productoId", controller.listarStockPorProducto);
+
+router.get("/precio-stock", controller.obtenerPrecioPorStock);
+
+
+
+
+router.get("/productos/existe-codigo/:codigo", controller.existeCodigoProducto);
+router.get("/productos/existe-codigo-variante/:codigo", controller.existeCodigoVariante);
+
+//PARA EDITAR PRODUCTOS
+router.get("/productos/existe-codigoparaEditar/:codigo", controller.existeCodigoProductoparaEditar);
+
+
+
+
+router.get("/motivos-movimiento", controller.listarMotivosMovimiento);
+
+
+router.get("/modelos", controller.listarModelos);
+router.get("/marcas", controller.listarMarcas);
+
+
+
+
+//ROUTES PARA MODULO MOVIMIENTOS GENERALES
+// Ruta para listar todos los cambios de almacén
+router.get(
+  "/cambios-almacen/todos",
+  controller.listarCambiosAlmacenTodosCompras
+);
+
+
+//MENU MOVIMINETOS PARA TABLAS GENERALES
+
+router.get(
+  "/movimientos/todos",
+  controller.listarMovimientosTodosCompras
+);
+
+
+router.get("/movimientos/:id/ultima-observacion", controller.getUltimaObservacionCompras);
+
+router.get("/movimientos/:id/detalle", controller.detalleMovimiento);
+
+
+
+
+router.put("/movimientos/:id", controller.editarMovimientoCompras);
+router.post("/movimientos/:id/reenviar", controller.reenviarMovimientoCompras);
+
+router.get("/movimientos/:id", controller.getMovimientoById);
+
+
+router.put(
+  "/productos/:id",
+  (req, res, next) => {
+    upload.single("imagen_producto")(req, res, err => {
+      if (err) {
+        console.error("❌ Multer error:", err.message);
+        return res.status(400).json({ error: err.message });
+      }
+      next();
+    });
+  },
+  controller.editarProducto
+);
+
+//PARA ELIMINAR PRODUCTOS, PRIMERO SE SOLICITA LA ELIMINACION, LUEGO SE CONFIRMA LA ELIMINACION
+
+router.post(
+  "/productos/:id/solicitar-eliminacion",
+  controller.solicitarEliminacionProducto
+);
+
+router.post(
+  "/productos/:id/confirmar-eliminacion",
+  controller.confirmarEliminacionProducto
+);
+
+
+
+
+module.exports = router;
