@@ -2225,7 +2225,7 @@ confirmarEliminacionProducto: async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { token, tipo } = req.body; // "inactivar" | "logico" | "fisico"
+    const { token, tipo } = req.body;
     const usuarioId = req.user.id;
 
     await conn.beginTransaction();
@@ -2260,7 +2260,6 @@ confirmarEliminacionProducto: async (req, res) => {
         [id]
       );
 
-      // marcar token usado
       await conn.query(
         "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
         [registro.id]
@@ -2283,7 +2282,6 @@ confirmarEliminacionProducto: async (req, res) => {
         [usuarioId, id]
       );
 
-      // marcar token usado
       await conn.query(
         "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
         [registro.id]
@@ -2291,30 +2289,67 @@ confirmarEliminacionProducto: async (req, res) => {
     }
 
     // ============================
-    // 🔴 ELIMINACIÓN FÍSICA
+    // 🔴 ELIMINACIÓN FÍSICA REAL
     // ============================
     else if (tipo === "fisico") {
 
-      // 1️⃣ borrar dependencias primero
-      await conn.query("DELETE FROM imagenes WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM cambios_almacen WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM movimientos_inventario WHERE producto_id = ?", [id]);
-      await conn.query("DELETE FROM stock_producto WHERE producto_id = ?", [id]);
+      // 1️⃣ borrar validaciones de movimientos
+      await conn.query(`
+        DELETE FROM validaciones_movimiento
+        WHERE movimiento_id IN (
+          SELECT id FROM movimientos_inventario WHERE producto_id = ?
+        )
+      `, [id]);
 
-      // 2️⃣ borrar hijos (variantes)
+      // 2️⃣ borrar imágenes asociadas a movimientos
+      await conn.query(`
+        DELETE FROM imagenes
+        WHERE movimiento_id IN (
+          SELECT id FROM movimientos_inventario WHERE producto_id = ?
+        )
+      `, [id]);
+
+      // 3️⃣ borrar movimientos
+      await conn.query(
+        "DELETE FROM movimientos_inventario WHERE producto_id = ?",
+        [id]
+      );
+
+      // 4️⃣ borrar imágenes directas del producto
+      await conn.query(
+        "DELETE FROM imagenes WHERE producto_id = ?",
+        [id]
+      );
+
+      // 5️⃣ otras dependencias
+      await conn.query(
+        "DELETE FROM producto_atributos WHERE producto_id = ?",
+        [id]
+      );
+
+      await conn.query(
+        "DELETE FROM cambios_almacen WHERE producto_id = ?",
+        [id]
+      );
+
+      await conn.query(
+        "DELETE FROM stock_producto WHERE producto_id = ?",
+        [id]
+      );
+
+      // 6️⃣ hijos (variantes)
       await conn.query(
         "DELETE FROM productos WHERE producto_padre_id = ?",
         [id]
       );
 
-      // 3️⃣ borrar tokens
+      // 7️⃣ tokens
       await conn.query(
         "DELETE FROM producto_eliminacion_tokens WHERE producto_id = ?",
         [id]
       );
 
-      // 4️⃣ finalmente borrar producto
+      // 8️⃣ finalmente el producto
       await conn.query(
         "DELETE FROM productos WHERE id = ?",
         [id]
