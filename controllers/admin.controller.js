@@ -96,7 +96,8 @@ crearUsuario: async (req, res) => {
       "outlook.com",
       "hotmail.com",
       "yahoo.com",
-      "icloud.com"
+      "yahoo.com",
+      "multilimpsac.com"
     ];
 
     if (!correo.includes("@")) {
