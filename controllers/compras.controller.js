@@ -2219,13 +2219,12 @@ solicitarEliminacionProducto: async (req, res) => {
   } finally {
     conn.release();
   }
-},
-confirmarEliminacionProducto: async (req, res) => {
+},confirmarEliminacionProducto: async (req, res) => {
   const conn = await pool.getConnection();
 
   try {
     const { id } = req.params;
-    const { token, tipo } = req.body;
+    const { token, tipo } = req.body; // "inactivar" | "logico" | "fisico"
     const usuarioId = req.user.id;
 
     await conn.beginTransaction();
@@ -2254,7 +2253,6 @@ confirmarEliminacionProducto: async (req, res) => {
     // 🟢 INACTIVAR
     // ============================
     if (tipo === "inactivar") {
-
       await conn.query(
         "UPDATE productos SET activo = 0 WHERE id = ?",
         [id]
@@ -2270,7 +2268,6 @@ confirmarEliminacionProducto: async (req, res) => {
     // 🟡 ELIMINACIÓN LÓGICA
     // ============================
     else if (tipo === "logico") {
-
       await conn.query(
         `
         UPDATE productos
@@ -2289,70 +2286,125 @@ confirmarEliminacionProducto: async (req, res) => {
     }
 
     // ============================
-    // 🔴 ELIMINACIÓN FÍSICA REAL
+    // 🔴 ELIMINACIÓN FÍSICA REAL (PADRE + VARIANTES)
     // ============================
     else if (tipo === "fisico") {
+      // 🔎 Obtener IDs de variantes
+      const [rows] = await conn.query(
+        "SELECT id FROM productos WHERE producto_padre_id = ?",
+        [id]
+      );
 
-      // 1️⃣ borrar validaciones de movimientos
+      const tieneVariantes = rows.length > 0;
+
+      // ================================
+      // 1️⃣ VALIDACIONES (padre + variantes)
+      // ================================
       await conn.query(`
         DELETE FROM validaciones_movimiento
         WHERE movimiento_id IN (
-          SELECT id FROM movimientos_inventario WHERE producto_id = ?
+          SELECT id FROM movimientos_inventario
+          WHERE producto_id = ?
+             OR producto_id IN (
+                SELECT id FROM productos WHERE producto_padre_id = ?
+             )
         )
-      `, [id]);
+      `, [id, id]);
 
-      // 2️⃣ borrar imágenes asociadas a movimientos
+      // ================================
+      // 2️⃣ IMÁGENES DE MOVIMIENTOS
+      // ================================
       await conn.query(`
         DELETE FROM imagenes
         WHERE movimiento_id IN (
-          SELECT id FROM movimientos_inventario WHERE producto_id = ?
+          SELECT id FROM movimientos_inventario
+          WHERE producto_id = ?
+             OR producto_id IN (
+                SELECT id FROM productos WHERE producto_padre_id = ?
+             )
         )
-      `, [id]);
+      `, [id, id]);
 
-      // 3️⃣ borrar movimientos
-      await conn.query(
-        "DELETE FROM movimientos_inventario WHERE producto_id = ?",
-        [id]
-      );
+      // ================================
+      // 3️⃣ MOVIMIENTOS
+      // ================================
+      await conn.query(`
+        DELETE FROM movimientos_inventario
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
 
-      // 4️⃣ borrar imágenes directas del producto
-      await conn.query(
-        "DELETE FROM imagenes WHERE producto_id = ?",
-        [id]
-      );
+      // ================================
+      // 4️⃣ IMÁGENES DIRECTAS
+      // ================================
+      await conn.query(`
+        DELETE FROM imagenes
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
 
-      // 5️⃣ otras dependencias
-      await conn.query(
-        "DELETE FROM producto_atributos WHERE producto_id = ?",
-        [id]
-      );
+      // ================================
+      // 5️⃣ ATRIBUTOS / CAMBIOS / STOCK
+      // ================================
+      await conn.query(`
+        DELETE FROM producto_atributos
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
 
-      await conn.query(
-        "DELETE FROM cambios_almacen WHERE producto_id = ?",
-        [id]
-      );
+      await conn.query(`
+        DELETE FROM cambios_almacen
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
 
-      await conn.query(
-        "DELETE FROM stock_producto WHERE producto_id = ?",
-        [id]
-      );
+      await conn.query(`
+        DELETE FROM stock_producto
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
 
-      // 6️⃣ hijos (variantes)
+      // ================================
+      // 6️⃣ TOKENS
+      // ================================
+      await conn.query(`
+        DELETE FROM producto_eliminacion_tokens
+        WHERE producto_id = ?
+           OR producto_id IN (
+              SELECT id FROM productos WHERE producto_padre_id = ?
+           )
+      `, [id, id]);
+
+      // ================================
+      // 7️⃣ ELIMINAR VARIANTES
+      // ================================
       await conn.query(
         "DELETE FROM productos WHERE producto_padre_id = ?",
         [id]
       );
 
-      // 7️⃣ tokens
-      await conn.query(
-        "DELETE FROM producto_eliminacion_tokens WHERE producto_id = ?",
-        [id]
-      );
-
-      // 8️⃣ finalmente el producto
+      // ================================
+      // 8️⃣ ELIMINAR PADRE
+      // ================================
       await conn.query(
         "DELETE FROM productos WHERE id = ?",
         [id]
+      );
+
+      // Marcar token usado
+      await conn.query(
+        "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
+        [registro.id]
       );
     }
 
@@ -2370,7 +2422,6 @@ confirmarEliminacionProducto: async (req, res) => {
     });
 
   } catch (error) {
-
     await conn.rollback();
     console.error("❌ confirmarEliminacionProducto:", error);
 
@@ -2378,7 +2429,6 @@ confirmarEliminacionProducto: async (req, res) => {
       error: "Error al eliminar producto",
       detalle: error.message
     });
-
   } finally {
     conn.release();
   }
