@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const controller = require("../controllers/compras.controller");
+const controller = require("../controllers/ventas.controller");
 const auth = require("../middlewares/authMiddleware");
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 const upload = require("../middlewares/upload");
