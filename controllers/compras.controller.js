@@ -2225,12 +2225,12 @@ confirmarEliminacionProducto: async (req, res) => {
 
   try {
     const { id } = req.params;
-    const { token, tipo } = req.body;
+    const { token, tipo } = req.body; // "inactivar" | "logico" | "fisico"
     const usuarioId = req.user.id;
 
     await conn.beginTransaction();
 
-    // 1️⃣ validar token
+    // 1️⃣ Validar token
     const [[registro]] = await conn.query(
       `
       SELECT * FROM producto_eliminacion_tokens
@@ -2245,23 +2245,33 @@ confirmarEliminacionProducto: async (req, res) => {
 
     if (!registro) {
       await conn.rollback();
-      return res.status(400).json({ error: "Código inválido o expirado" });
+      return res.status(400).json({
+        error: "Código inválido o expirado"
+      });
     }
 
     // ============================
     // 🟢 INACTIVAR
     // ============================
     if (tipo === "inactivar") {
+
       await conn.query(
         "UPDATE productos SET activo = 0 WHERE id = ?",
         [id]
+      );
+
+      // marcar token usado
+      await conn.query(
+        "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
+        [registro.id]
       );
     }
 
     // ============================
     // 🟡 ELIMINACIÓN LÓGICA
     // ============================
-    if (tipo === "logico") {
+    else if (tipo === "logico") {
+
       await conn.query(
         `
         UPDATE productos
@@ -2272,43 +2282,60 @@ confirmarEliminacionProducto: async (req, res) => {
         `,
         [usuarioId, id]
       );
+
+      // marcar token usado
+      await conn.query(
+        "UPDATE producto_eliminacion_tokens SET usado = 1 WHERE id = ?",
+        [registro.id]
+      );
     }
 
     // ============================
     // 🔴 ELIMINACIÓN FÍSICA
     // ============================
-    if (tipo === "fisico") {
+    else if (tipo === "fisico") {
 
-      // 1️⃣ borrar tokens primero (clave foránea)
-      await conn.query(
-        "DELETE FROM producto_eliminacion_tokens WHERE producto_id = ?",
-        [id]
-      );
-
-      // 2️⃣ hijos (variantes)
-      await conn.query(
-        "DELETE FROM productos WHERE producto_padre_id = ?",
-        [id]
-      );
-
-      // 3️⃣ tablas dependientes
+      // 1️⃣ borrar dependencias primero
       await conn.query("DELETE FROM imagenes WHERE producto_id = ?", [id]);
       await conn.query("DELETE FROM producto_atributos WHERE producto_id = ?", [id]);
       await conn.query("DELETE FROM cambios_almacen WHERE producto_id = ?", [id]);
       await conn.query("DELETE FROM movimientos_inventario WHERE producto_id = ?", [id]);
       await conn.query("DELETE FROM stock_producto WHERE producto_id = ?", [id]);
 
-      // 4️⃣ finalmente el producto
+      // 2️⃣ borrar hijos (variantes)
+      await conn.query(
+        "DELETE FROM productos WHERE producto_padre_id = ?",
+        [id]
+      );
+
+      // 3️⃣ borrar tokens
+      await conn.query(
+        "DELETE FROM producto_eliminacion_tokens WHERE producto_id = ?",
+        [id]
+      );
+
+      // 4️⃣ finalmente borrar producto
       await conn.query(
         "DELETE FROM productos WHERE id = ?",
         [id]
       );
     }
 
+    else {
+      await conn.rollback();
+      return res.status(400).json({
+        error: "Tipo de eliminación inválido"
+      });
+    }
+
     await conn.commit();
-    res.json({ mensaje: "Acción ejecutada correctamente" });
+
+    return res.json({
+      mensaje: "Acción ejecutada correctamente"
+    });
 
   } catch (error) {
+
     await conn.rollback();
     console.error("❌ confirmarEliminacionProducto:", error);
 
@@ -2316,11 +2343,11 @@ confirmarEliminacionProducto: async (req, res) => {
       error: "Error al eliminar producto",
       detalle: error.message
     });
+
   } finally {
     conn.release();
   }
 },
-
   };
 
 
