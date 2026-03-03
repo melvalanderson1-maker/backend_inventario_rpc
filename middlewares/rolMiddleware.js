@@ -9,6 +9,10 @@ const rolMiddleware = (rolesPermitidos) => (req, res, next) => {
   // rolesPermitidos puede ser string o array
   const roles = Array.isArray(rolesPermitidos) ? rolesPermitidos : [rolesPermitidos];
 
+  // ❌ Debug extra
+  console.log("💡 usuario.rol:", usuario.rol);
+  console.log("💡 roles.includes(usuario.rol):", roles.includes(usuario.rol));
+
   if (!roles.includes(usuario.rol))
     return res.status(403).json({ message: "Rol no permitido" });
 
