@@ -4,13 +4,15 @@ const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 30 * 1024 * 1024 }, // 50MB
   fileFilter: (req, file, cb) => {
+
     if (!file.mimetype.startsWith("image/")) {
-      cb(new Error("Solo imágenes"));
+      return cb(new Error("Solo se permiten imágenes"));
     }
+
     cb(null, true);
   }
 });
 
-module.exports = upload;
+module.exports = upload; 
