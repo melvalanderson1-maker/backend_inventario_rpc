@@ -7,7 +7,10 @@ const { rolMiddleware } = require("../middlewares/rolMiddleware");
 router.use(auth);
 
 // 🔥 IGUAL QUE LOGISTICA → AGREGA ROL
-router.get("/kpis", rolMiddleware("ADMIN_VENTAS"), controller.getKPIs);
+router.get("/kpis",
+  rolMiddleware("ADMIN_VENTAS", "ADMIN_LOGISTICA"),
+  controller.getKPIs
+);
 
 router.get("/top-productos-valor", rolMiddleware("ADMIN_VENTAS"), controller.topProductosValor);
 
