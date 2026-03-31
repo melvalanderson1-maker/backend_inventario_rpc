@@ -3,14 +3,11 @@ const controller = require("../controllers/inventarioDashboard.controller");
 const auth = require("../middlewares/authMiddleware");
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
-// 🔐 PRIMERO AUTH
+// 🔐 AUTH
 router.use(auth);
 
-// 🔥 IGUAL QUE LOGISTICA → AGREGA ROL
-router.get("/kpis",
-  rolMiddleware("ADMIN_VENTAS", "ADMIN_LOGISTICA"),
-  controller.getKPIs
-);
+// 🔥 RUTAS DASHBOARD
+router.get("/kpis", rolMiddleware("ADMIN_VENTAS"), controller.getKPIs);
 
 router.get("/top-productos-valor", rolMiddleware("ADMIN_VENTAS"), controller.topProductosValor);
 
