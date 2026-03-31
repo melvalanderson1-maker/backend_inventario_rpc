@@ -33,14 +33,18 @@ console.log("FRONT_URL usando:", process.env.FRONT_URL);
 
 
 // CORS
-app.use(cors({
-  origin: true,
+const corsOptions = {
+  origin: [
+    "http://localhost:5173",
+    "https://rpcinventario.gruecolimp.com"
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
-}));
+};
 
-app.options("*", cors());
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 
 
