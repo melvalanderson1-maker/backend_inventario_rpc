@@ -99,7 +99,7 @@ app.use("/api/contabilidad", require("./routes/contabilidad.routes"));
 
 
 
-app.use("/api/compras", require("./routes/compras.routes"));
+
 
 app.use("/api/categorias", require("./routes/categorias.routes"));
 app.use("/api/atributos", require("./routes/atributos.routes"));
