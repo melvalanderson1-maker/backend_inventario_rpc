@@ -1,20 +1,19 @@
 // middlewares/rolMiddleware.js
 const rolMiddleware = (rolesPermitidos) => (req, res, next) => {
-  const usuario = req.user; // ⚡ asegúrate de usar req.user
-
-  console.log("💡 rolMiddleware → usuario:", usuario);
+  const usuario = req.user;
 
   if (!usuario) return res.status(403).json({ message: "No autorizado" });
 
-  // rolesPermitidos puede ser string o array
   const roles = Array.isArray(rolesPermitidos) ? rolesPermitidos : [rolesPermitidos];
 
-  // ❌ Debug extra
-  console.log("💡 usuario.rol:", usuario.rol);
-  console.log("💡 roles.includes(usuario.rol):", roles.includes(usuario.rol));
+  // Compara ignorando mayúsculas y espacios
+  const rolValido = roles.map(r => r.toUpperCase().trim()).includes(usuario.rol.toUpperCase().trim());
 
-  if (!roles.includes(usuario.rol))
-    return res.status(403).json({ message: "Rol no permitido" });
+  console.log("💡 usuario.rol:", usuario.rol);
+  console.log("💡 rolesPermitidos:", roles);
+  console.log("💡 rolValido:", rolValido);
+
+  if (!rolValido) return res.status(403).json({ message: "Rol no permitido" });
 
   next();
 };
