@@ -1,23 +1,26 @@
 const router = require("express").Router();
 const controller = require("../controllers/inventarioDashboard.controller");
 const auth = require("../middlewares/authMiddleware");
+const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
+// 🔐 PRIMERO AUTH
 router.use(auth);
 
-/* KPIs */
-router.get("/kpis", controller.getKPIs);
+// 🔥 IGUAL QUE LOGISTICA → AGREGA ROL
+router.get("/kpis", rolMiddleware("ADMIN_VENTAS"), controller.getKPIs);
 
-/* gráficos */
-router.get("/top-productos-valor", controller.topProductosValor);
-router.get("/top-stock", controller.topProductosStock);
-router.get("/stock-bajo", controller.productosStockBajo);
-router.get("/inventario-almacen", controller.inventarioPorAlmacen);
-router.get("/rotacion", controller.rotacionInventario);
+router.get("/top-productos-valor", rolMiddleware("ADMIN_VENTAS"), controller.topProductosValor);
 
-/* tablas */
-router.get("/productos-sin-movimiento", controller.productosSinMovimiento);
+router.get("/top-stock", rolMiddleware("ADMIN_VENTAS"), controller.topProductosStock);
 
-/* detalle producto */
-router.get("/producto/:id/lotes", controller.detalleLotesProducto);
+router.get("/stock-bajo", rolMiddleware("ADMIN_VENTAS"), controller.productosStockBajo);
+
+router.get("/inventario-almacen", rolMiddleware("ADMIN_VENTAS"), controller.inventarioPorAlmacen);
+
+router.get("/rotacion", rolMiddleware("ADMIN_VENTAS"), controller.rotacionInventario);
+
+router.get("/productos-sin-movimiento", rolMiddleware("ADMIN_VENTAS"), controller.productosSinMovimiento);
+
+router.get("/producto/:id/lotes", rolMiddleware("ADMIN_VENTAS"), controller.detalleLotesProducto);
 
 module.exports = router;
