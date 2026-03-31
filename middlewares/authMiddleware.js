@@ -31,6 +31,8 @@ const authMiddleware = (req, res, next) => {
 
     console.log("JWT PAYLOAD:", payload);
 
+    console.log("🔐 ROL EN TOKEN:", payload.rol); // 👈 ESTE ES EL IMPORTANTE
+
     next();
   } catch (error) {
     console.error("JWT ERROR:", error);
