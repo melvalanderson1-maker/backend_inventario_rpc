@@ -23,6 +23,9 @@ const comprasRoutes = require("./routes/compras.routes");
 const catalogosRoutes = require("./routes/catalogos.routes");
 
 
+const dashboardRoutes = require("./routes/inventarioDashboard.routes");
+
+
 const app = express();
 
 console.log("TOKEN MP:", process.env.MP_ACCESS_TOKEN);
@@ -104,6 +107,8 @@ app.use("/api/compras", comprasRoutes);
 app.use("/api", catalogosRoutes);
 
 
+
+app.use("/api/dashboard", dashboardRoutes);
 
 
 
