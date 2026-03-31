@@ -5,7 +5,7 @@ const { rolMiddleware } = require("../middlewares/rolMiddleware");
 const upload = require("../middlewares/upload");
 
 router.use(auth);
-router.use(rolMiddleware(["ADMIN_COMPRAS", "ADMIN_VENTAS"]));
+router.use(rolMiddleware(["ADMIN_COMPRAS"]));
 
 router.get("/productos", controller.listarProductos);
 router.get("/productos/:id", controller.obtenerProducto);
