@@ -7,7 +7,7 @@ const { rolMiddleware } = require("../middlewares/rolMiddleware");
 router.use(auth);
 
 // 🔐 Solo ADMIN_VENTAS puede acceder a este router
-router.use(rolMiddleware(["ADMIN_VENTAS"]));
+router.use(rolMiddleware(["ADMIN_COMPRAS", "ADMIN_VENTAS"]));
 
 // 🔥 RUTAS DASHBOARD SOLO PARA ADMIN_VENTAS
 router.get("/kpis", controller.getKPIs);
