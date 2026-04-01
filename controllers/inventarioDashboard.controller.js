@@ -5,10 +5,11 @@ let pool;
 
 
 // ======================================
-// BASE QUERY (LOTE VALORIZADO)
+// BASE QUERY
 // ======================================
 
 const BASE_QUERY = `
+
 WITH movimientos_lote AS (
 
     SELECT
@@ -17,27 +18,17 @@ WITH movimientos_lote AS (
         almacen_id,
         fabricante_id,
 
-        MAX(
-            CONVERT_TZ(
-                fecha_validacion_logistica,
-                '+00:00',
-                '-05:00'
-            )
-        ) AS ultimo_movimiento_lote,
+        MAX(fecha_validacion_logistica) AS ultimo_movimiento_lote,
 
         MAX(
-            CASE 
+            CASE
                 WHEN tipo_movimiento = 'salida'
-                THEN CONVERT_TZ(
-                    fecha_validacion_logistica,
-                    '+00:00',
-                    '-05:00'
-                )
+                THEN fecha_validacion_logistica
             END
         ) AS ultima_salida_lote,
 
         SUM(
-            CASE 
+            CASE
                 WHEN tipo_movimiento IN ('entrada','saldo_inicial')
                 THEN cantidad
                 ELSE 0
@@ -45,7 +36,7 @@ WITH movimientos_lote AS (
         ) AS total_entradas,
 
         SUM(
-            CASE 
+            CASE
                 WHEN tipo_movimiento IN ('entrada','saldo_inicial')
                 THEN cantidad * precio
                 ELSE 0
@@ -80,8 +71,7 @@ lotes_valorizados AS (
             COALESCE(
                 ml.total_costo / NULLIF(ml.total_entradas,0),
                 0
-            ),
-            4
+            ),4
         ) AS precio_promedio_lote
 
     FROM stock_producto sp
@@ -95,7 +85,33 @@ lotes_valorizados AS (
             OR ml.fabricante_id = sp.fabricante_id
         )
 )
+
 `;
+
+
+// ======================================
+// FILTROS DINAMICOS
+// ======================================
+
+function buildFilters(query) {
+
+    const { empresa_id, almacen_id } = query;
+
+    let where = "WHERE 1=1";
+    const params = [];
+
+    if (empresa_id) {
+        where += " AND lv.empresa_id = ?";
+        params.push(empresa_id);
+    }
+
+    if (almacen_id) {
+        where += " AND lv.almacen_id = ?";
+        params.push(almacen_id);
+    }
+
+    return { where, params };
+}
 
 
 // ======================================
@@ -106,15 +122,18 @@ exports.getKPIs = async (req, res) => {
 
     try {
 
+        const { where, params } = buildFilters(req.query);
+
         const query = `
+
         ${BASE_QUERY}
 
         SELECT
 
             COUNT(DISTINCT producto_id) AS productos,
 
-            COUNT(
-                CASE WHEN stock_lote > 0 THEN 1 END
+            SUM(
+                CASE WHEN stock_lote > 0 THEN 1 ELSE 0 END
             ) AS productos_con_stock,
 
             ROUND(
@@ -122,40 +141,46 @@ exports.getKPIs = async (req, res) => {
                 2
             ) AS valor_inventario,
 
-            COUNT(
+            SUM(
                 CASE
                     WHEN DATEDIFF(
                         CURDATE(),
                         COALESCE(ultima_salida_lote, ultimo_movimiento_lote)
                     ) > 90
                     THEN 1
+                    ELSE 0
                 END
             ) AS productos_sin_movimiento
 
-        FROM lotes_valorizados
-        WHERE stock_lote > 0
+        FROM lotes_valorizados lv
+
+        ${where}
+
         `;
 
-        const [rows] = await pool.query(query);
+        const [rows] = await pool.query(query, params);
 
         res.json(rows[0]);
 
     } catch (error) {
-        console.error("KPIS ERROR", error);
+        console.error(error);
         res.status(500).json({ error: "Error KPIs" });
     }
 };
 
 
 // ======================================
-// TOP PRODUCTOS POR VALOR
+// TOP PRODUCTOS VALOR
 // ======================================
 
 exports.topProductosValor = async (req, res) => {
 
     try {
 
+        const { where, params } = buildFilters(req.query);
+
         const query = `
+
         ${BASE_QUERY}
 
         SELECT
@@ -175,16 +200,17 @@ exports.topProductosValor = async (req, res) => {
         JOIN productos p
         ON p.id = lv.producto_id
 
-        WHERE stock_lote > 0
+        ${where}
 
         GROUP BY p.id
 
         ORDER BY valor_total DESC
 
         LIMIT 10
+
         `;
 
-        const [rows] = await pool.query(query);
+        const [rows] = await pool.query(query, params);
 
         res.json(rows);
 
@@ -196,117 +222,39 @@ exports.topProductosValor = async (req, res) => {
 
 
 // ======================================
-// TOP PRODUCTOS POR STOCK
+// HEATMAP INVENTARIO
 // ======================================
 
-exports.topProductosStock = async (req, res) => {
+exports.heatmapInventario = async (req, res) => {
 
     try {
 
         const query = `
+
         ${BASE_QUERY}
 
         SELECT
 
-            p.codigo,
-            p.descripcion,
-
-            SUM(stock_lote) AS stock_total
-
-        FROM lotes_valorizados lv
-
-        JOIN productos p
-        ON p.id = lv.producto_id
-
-        GROUP BY p.id
-
-        ORDER BY stock_total DESC
-
-        LIMIT 10
-        `;
-
-        const [rows] = await pool.query(query);
-
-        res.json(rows);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Error top stock" });
-    }
-};
-
-
-// ======================================
-// PRODUCTOS STOCK BAJO
-// ======================================
-
-exports.productosStockBajo = async (req, res) => {
-
-    try {
-
-        const query = `
-        ${BASE_QUERY}
-
-        SELECT
-
-            p.codigo,
-            p.descripcion,
-
-            SUM(stock_lote) AS stock_total
-
-        FROM lotes_valorizados lv
-
-        JOIN productos p
-        ON p.id = lv.producto_id
-
-        GROUP BY p.id
-
-        HAVING stock_total <= 5
-
-        ORDER BY stock_total ASC
-        `;
-
-        const [rows] = await pool.query(query);
-
-        res.json(rows);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Error stock bajo" });
-    }
-};
-
-
-// ======================================
-// INVENTARIO POR ALMACEN
-// ======================================
-
-exports.inventarioPorAlmacen = async (req, res) => {
-
-    try {
-
-        const query = `
-        ${BASE_QUERY}
-
-        SELECT
-
+            e.nombre AS empresa,
             a.nombre AS almacen,
-
-            SUM(stock_lote) AS stock_total,
 
             ROUND(
                 SUM(stock_lote * precio_promedio_lote),
                 2
-            ) AS valor_total
+            ) AS valor
 
         FROM lotes_valorizados lv
+
+        JOIN empresas e
+        ON e.id = lv.empresa_id
 
         JOIN almacenes a
         ON a.id = lv.almacen_id
 
-        GROUP BY a.id
+        GROUP BY e.id, a.id
 
-        ORDER BY valor_total DESC
+        ORDER BY valor DESC
+
         `;
 
         const [rows] = await pool.query(query);
@@ -314,29 +262,34 @@ exports.inventarioPorAlmacen = async (req, res) => {
         res.json(rows);
 
     } catch (error) {
+
         console.error(error);
-        res.status(500).json({ error: "Error inventario por almacen" });
+
+        res.status(500).json({
+            error: "Error heatmap inventario"
+        });
     }
 };
 
 
 // ======================================
-// ROTACION INVENTARIO
+// ROTACION INVENTARIO REAL
 // ======================================
 
 exports.rotacionInventario = async (req, res) => {
 
     try {
 
+        const { where, params } = buildFilters(req.query);
+
         const query = `
+
         ${BASE_QUERY}
 
         SELECT
 
             p.codigo,
             p.descripcion,
-
-            SUM(stock_lote) AS stock_total,
 
             MAX(
                 DATEDIFF(
@@ -350,122 +303,79 @@ exports.rotacionInventario = async (req, res) => {
         JOIN productos p
         ON p.id = lv.producto_id
 
+        ${where}
+
         GROUP BY p.id
 
         ORDER BY dias_sin_salida DESC
 
-        LIMIT 10
+        LIMIT 20
+
         `;
 
-        const [rows] = await pool.query(query);
+        const [rows] = await pool.query(query, params);
 
         res.json(rows);
 
     } catch (error) {
+
         console.error(error);
-        res.status(500).json({ error: "Error rotacion" });
+
+        res.status(500).json({
+            error: "Error rotacion inventario"
+        });
     }
 };
 
 
 // ======================================
-// PRODUCTOS SIN MOVIMIENTO
+// INVENTARIO POR ALMACEN
 // ======================================
 
-exports.productosSinMovimiento = async (req, res) => {
+exports.inventarioPorAlmacen = async (req, res) => {
 
     try {
 
+        const { where, params } = buildFilters(req.query);
+
         const query = `
+
         ${BASE_QUERY}
 
         SELECT
 
-            p.codigo,
-            p.descripcion,
-
-            MAX(
-                DATEDIFF(
-                    CURDATE(),
-                    COALESCE(ultima_salida_lote, ultimo_movimiento_lote)
-                )
-            ) AS dias_sin_movimiento
-
-        FROM lotes_valorizados lv
-
-        JOIN productos p
-        ON p.id = lv.producto_id
-
-        GROUP BY p.id
-
-        HAVING dias_sin_movimiento > 90
-
-        ORDER BY dias_sin_movimiento DESC
-        `;
-
-        const [rows] = await pool.query(query);
-
-        res.json(rows);
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Error productos sin movimiento" });
-    }
-};
-
-
-// ======================================
-// DETALLE LOTES PRODUCTO
-// ======================================
-
-exports.detalleLotesProducto = async (req, res) => {
-
-    try {
-
-        const { id } = req.params;
-
-        const query = `
-        ${BASE_QUERY}
-
-        SELECT
-
-            e.nombre AS empresa,
             a.nombre AS almacen,
-            f.nombre AS fabricante,
 
-            stock_lote,
-
-            precio_promedio_lote,
+            SUM(stock_lote) AS stock_total,
 
             ROUND(
-                stock_lote * precio_promedio_lote,
+                SUM(stock_lote * precio_promedio_lote),
                 2
-            ) AS valor_lote,
-
-            ultimo_movimiento_lote,
-            ultima_salida_lote
+            ) AS valor_total
 
         FROM lotes_valorizados lv
-
-        JOIN empresas e
-        ON e.id = lv.empresa_id
 
         JOIN almacenes a
         ON a.id = lv.almacen_id
 
-        LEFT JOIN fabricantes f
-        ON f.id = lv.fabricante_id
+        ${where}
 
-        WHERE lv.producto_id = ?
-        AND stock_lote > 0
+        GROUP BY a.id
+
+        ORDER BY valor_total DESC
+
         `;
 
-        const [rows] = await pool.query(query, [id]);
+        const [rows] = await pool.query(query, params);
 
         res.json(rows);
 
     } catch (error) {
+
         console.error(error);
-        res.status(500).json({ error: "Error detalle producto" });
+
+        res.status(500).json({
+            error: "Error inventario por almacen"
+        });
     }
 };

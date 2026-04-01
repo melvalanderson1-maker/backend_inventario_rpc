@@ -1,13 +1,17 @@
 const router = require("express").Router();
+
 const controller = require("../controllers/inventarioDashboard.controller");
 
 const authMiddleware = require("../middlewares/authMiddleware");
+
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
-// 🔐 Autenticación
+
+// 🔐 AUTH
 router.use(authMiddleware);
 
-// 🔐 Control de roles
+
+// 🔐 ROLES
 router.use(
   rolMiddleware([
     "ADMIN_COMPRAS",
@@ -15,24 +19,39 @@ router.use(
   ])
 );
 
+
 // =============================
 // DASHBOARD
 // =============================
 
-router.get("/kpis", controller.getKPIs);
+router.get(
+  "/kpis",
+  controller.getKPIs
+);
 
-router.get("/top-productos-valor", controller.topProductosValor);
 
-router.get("/top-stock", controller.topProductosStock);
+router.get(
+  "/top-productos-valor",
+  controller.topProductosValor
+);
 
-router.get("/stock-bajo", controller.productosStockBajo);
 
-router.get("/inventario-almacen", controller.inventarioPorAlmacen);
+router.get(
+  "/inventario-almacen",
+  controller.inventarioPorAlmacen
+);
 
-router.get("/rotacion", controller.rotacionInventario);
 
-router.get("/productos-sin-movimiento", controller.productosSinMovimiento);
+router.get(
+  "/rotacion",
+  controller.rotacionInventario
+);
 
-router.get("/producto/:id/lotes", controller.detalleLotesProducto);
+
+router.get(
+  "/heatmap",
+  controller.heatmapInventario
+);
+
 
 module.exports = router;
