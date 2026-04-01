@@ -4,7 +4,13 @@ const { rolMiddleware } = require("../middlewares/rolMiddleware");
 const pool = require("../config/db").initDB;
 
 router.use(auth);
-router.use(rolMiddleware("ADMIN_COMPRAS"));
+router.use(
+  rolMiddleware([
+    "ADMIN_COMPRAS",
+    "ADMIN_VENTAS"
+  ])
+);
+
 
 /* EMPRESAS */
 router.get("/empresas", async (req, res) => {
