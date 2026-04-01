@@ -1,7 +1,7 @@
 const { initDB } = require("../config/db");
 
 let pool;
-(async()=> pool = await initDB())();
+(async () => pool = await initDB())();
 
 const BASE_QUERY = `
 WITH movimientos_lote AS (
@@ -114,30 +114,29 @@ LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
 WHERE lv.stock_lote>0
 `;
 
-exports.getKPIs = async(req,res)=>{
+exports.getKPIs = async (req,res)=>{
 
 const [rows] = await pool.query(`
 SELECT
 COUNT(DISTINCT codigo_producto) productos,
-COUNT(DISTINCT CASE WHEN stock_total_producto>0 THEN codigo_producto END) con_stock,
-SUM(valor_total_producto) valor,
-COUNT(CASE WHEN estado_rotacion='INMOVILIZADO' THEN 1 END) inmovilizado
+SUM(valor_total_producto) valor_total,
+COUNT(CASE WHEN estado_rotacion='INMOVILIZADO' THEN 1 END) inmovilizados
 FROM (${BASE_QUERY}) t
 `);
 
 res.json(rows[0]);
 };
 
-exports.getTopProductosValor = async(req,res)=>{
+exports.getTopProductosValor = async (req,res)=>{
 
 const [rows] = await pool.query(`
 SELECT
 codigo_producto,
 producto,
-stock_total_producto,
-valor_total_producto
+MAX(stock_total_producto) stock_total_producto,
+MAX(valor_total_producto) valor_total_producto
 FROM (${BASE_QUERY}) t
-GROUP BY codigo_producto
+GROUP BY codigo_producto,producto
 ORDER BY valor_total_producto DESC
 LIMIT 10
 `);
@@ -145,7 +144,7 @@ LIMIT 10
 res.json(rows);
 };
 
-exports.getRotacion = async(req,res)=>{
+exports.getRotacion = async (req,res)=>{
 
 const [rows] = await pool.query(`
 SELECT estado_rotacion estado, COUNT(*) total
@@ -156,7 +155,7 @@ GROUP BY estado_rotacion
 res.json(rows);
 };
 
-exports.getHeatmap = async(req,res)=>{
+exports.getHeatmap = async (req,res)=>{
 
 const [rows] = await pool.query(`
 SELECT
@@ -166,6 +165,20 @@ SUM(valor_lote) valor
 FROM (${BASE_QUERY}) t
 GROUP BY empresa,almacen
 `);
+
+res.json(rows);
+};
+
+exports.getLotesByEmpresaAlmacen = async (req,res)=>{
+
+const { empresa, almacen } = req.query;
+
+const [rows] = await pool.query(`
+SELECT *
+FROM (${BASE_QUERY}) t
+WHERE empresa=? AND almacen=?
+ORDER BY valor_lote DESC
+`,[empresa,almacen]);
 
 res.json(rows);
 };
