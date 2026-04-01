@@ -3,7 +3,13 @@ const { initDB } = require("../config/db");
 let pool;
 (async () => pool = await initDB())();
 
+
+// =====================================
+// BASE QUERY (TU CONSULTA SQL)
+// =====================================
+
 const BASE_QUERY = `
+
 WITH movimientos_lote AS (
 
 SELECT
@@ -93,10 +99,10 @@ COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote)
 
 CASE
 WHEN DATEDIFF(CURDATE(),COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote))>90
-THEN 'INMOVILIZADO'
+THEN '🔴 INVENTARIO INMOVILIZADO'
 WHEN DATEDIFF(CURDATE(),COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote))>30
-THEN 'LENTO'
-ELSE 'NORMAL'
+THEN '🟡 ROTACION LENTA'
+ELSE '🟢 ROTACION NORMAL'
 END estado_rotacion,
 
 SUM(lv.stock_lote) OVER(PARTITION BY lv.producto_id) stock_total_producto,
@@ -114,71 +120,195 @@ LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
 WHERE lv.stock_lote>0
 `;
 
+
+// =====================================
+// KPIs
+// =====================================
+
 exports.getKPIs = async (req,res)=>{
 
+try{
+
 const [rows] = await pool.query(`
+
 SELECT
 COUNT(DISTINCT codigo_producto) productos,
-SUM(valor_total_producto) valor_total,
-COUNT(CASE WHEN estado_rotacion='INMOVILIZADO' THEN 1 END) inmovilizados
+SUM(valor_total_producto) valor,
+COUNT(CASE WHEN estado_rotacion='🔴 INVENTARIO INMOVILIZADO' THEN 1 END) inmovilizado
+
 FROM (${BASE_QUERY}) t
+
 `);
 
 res.json(rows[0]);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error KPIs"});
+
+}
+
 };
+
+
+// =====================================
+// TOP PRODUCTOS POR VALOR
+// =====================================
 
 exports.getTopProductosValor = async (req,res)=>{
 
+try{
+
 const [rows] = await pool.query(`
+
 SELECT
 codigo_producto,
 producto,
 MAX(stock_total_producto) stock_total_producto,
 MAX(valor_total_producto) valor_total_producto
+
 FROM (${BASE_QUERY}) t
+
 GROUP BY codigo_producto,producto
+
 ORDER BY valor_total_producto DESC
+
 LIMIT 10
+
 `);
 
 res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error top productos"});
+
+}
+
 };
+
+
+// =====================================
+// ROTACION
+// =====================================
 
 exports.getRotacion = async (req,res)=>{
 
+try{
+
 const [rows] = await pool.query(`
-SELECT estado_rotacion estado, COUNT(*) total
+
+SELECT
+estado_rotacion estado,
+COUNT(*) total
+
 FROM (${BASE_QUERY}) t
+
 GROUP BY estado_rotacion
+
 `);
 
 res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error rotacion"});
+
+}
+
 };
+
+
+// =====================================
+// HEATMAP
+// =====================================
 
 exports.getHeatmap = async (req,res)=>{
 
+try{
+
 const [rows] = await pool.query(`
+
 SELECT
 empresa,
 almacen,
 SUM(valor_lote) valor
+
 FROM (${BASE_QUERY}) t
+
 GROUP BY empresa,almacen
+
 `);
 
 res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error heatmap"});
+
+}
+
 };
 
+
+// =====================================
+// TABLA COMPLETA INVENTARIO
+// =====================================
+
+exports.getInventario = async (req,res)=>{
+
+try{
+
+const [rows] = await pool.query(`
+
+SELECT *
+FROM (${BASE_QUERY}) t
+ORDER BY valor_total_producto DESC
+
+`);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error inventario"});
+
+}
+
+};
+
+
+// =====================================
+// DETALLE POR EMPRESA / ALMACEN
+// =====================================
+
 exports.getLotesByEmpresaAlmacen = async (req,res)=>{
+
+try{
 
 const { empresa, almacen } = req.query;
 
 const [rows] = await pool.query(`
+
 SELECT *
 FROM (${BASE_QUERY}) t
 WHERE empresa=? AND almacen=?
 ORDER BY valor_lote DESC
+
 `,[empresa,almacen]);
 
 res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error detalle almacen"});
+
+}
+
 };
