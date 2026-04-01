@@ -6,12 +6,8 @@ const authMiddleware = require("../middlewares/authMiddleware");
 
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
-
-// 🔐 AUTH
 router.use(authMiddleware);
 
-
-// 🔐 ROLES
 router.use(
   rolMiddleware([
     "ADMIN_COMPRAS",
@@ -19,39 +15,12 @@ router.use(
   ])
 );
 
+router.get("/kpis",controller.getKPIs);
 
-// =============================
-// DASHBOARD
-// =============================
+router.get("/top-productos-valor",controller.getTopProductosValor);
 
-router.get(
-  "/kpis",
-  controller.getKPIs
-);
+router.get("/rotacion",controller.getRotacion);
 
-
-router.get(
-  "/top-productos-valor",
-  controller.topProductosValor
-);
-
-
-router.get(
-  "/inventario-almacen",
-  controller.inventarioPorAlmacen
-);
-
-
-router.get(
-  "/rotacion",
-  controller.rotacionInventario
-);
-
-
-router.get(
-  "/heatmap",
-  controller.heatmapInventario
-);
-
+router.get("/heatmap",controller.getHeatmap);
 
 module.exports = router;
