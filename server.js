@@ -17,13 +17,15 @@ const seccionesRoutes = require("./routes/secciones.routes");
 
 const facturasRoutes = require("./routes/facturas.routes");
 
+const dashboardRoutes = require("./routes/inventarioDashboard.routes");
+
 
 
 const comprasRoutes = require("./routes/compras.routes");
 const catalogosRoutes = require("./routes/catalogos.routes");
 
 
-const dashboardRoutes = require("./routes/inventarioDashboard.routes");
+
 
 
 const app = express();
@@ -97,7 +99,7 @@ app.use("/api/contabilidad", require("./routes/contabilidad.routes"));
 
 
 
-
+app.use("/api/dashboard", dashboardRoutes);
 
 
 
@@ -112,7 +114,7 @@ app.use("/api", catalogosRoutes);
 
 
 
-app.use("/api/dashboard", dashboardRoutes);
+
 
 
 

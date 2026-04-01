@@ -28,6 +28,8 @@ const authMiddleware = (req, res, next) => {
 
     // ✅ AQUÍ recién existe req.user
     req.user = payload;
+    
+    console.log("✅ req.user listo para middleware:", req.user);
 
     console.log("JWT PAYLOAD:", payload);
 
