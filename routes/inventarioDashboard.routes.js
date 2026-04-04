@@ -5,75 +5,25 @@ const controller = require("../controllers/inventarioDashboard.controller");
 const authMiddleware = require("../middlewares/authMiddleware");
 const { rolMiddleware } = require("../middlewares/rolMiddleware");
 
-
-// =============================
-// 🔐 AUTH
-// =============================
 router.use(authMiddleware);
 
-
-// =============================
-// 🔐 ROLES
-// =============================
 router.use(
-  rolMiddleware([
-    "ADMIN_COMPRAS",
-    "ADMIN_VENTAS"
-  ])
+rolMiddleware([
+"ADMIN_COMPRAS",
+"ADMIN_VENTAS"
+])
 );
 
+router.get("/kpis",controller.getKPIs);
 
-// =============================
-// DASHBOARD INVENTARIO
-// =============================
+router.get("/top-productos-valor",controller.getTopProductosValor);
 
-// KPIs
-router.get(
-  "/kpis",
-  controller.getKPIs
-);
+router.get("/rotacion",controller.getRotacion);
 
-// TOP PRODUCTOS
-router.get(
-  "/top-productos-valor",
-  controller.getTopProductosValor
-);
+router.get("/inventario",controller.getInventario);
 
-// ROTACION
-router.get(
-  "/rotacion",
-  controller.getRotacion
-);
+router.get("/productos-stock",controller.getProductosStock);
 
-// HEATMAP
-router.get(
-  "/heatmap",
-  controller.getHeatmap
-);
-
-// TABLA COMPLETA INVENTARIO
-router.get(
-  "/inventario",
-  controller.getInventario
-);
-
-// DETALLE POR EMPRESA / ALMACEN
-router.get(
-  "/inventario-almacen",
-  controller.getLotesByEmpresaAlmacen
-);
-
-// PRODUCTOS POR STOCK
-router.get(
-  "/productos-stock",
-  controller.getProductosStock
-);
-
-
-// VALOR POR EMPRESA (grafico gerencial)
-router.get(
-  "/valor-por-empresa",
-  controller.getValorPorEmpresa
-);
+router.get("/valor-por-empresa",controller.getValorPorEmpresa);
 
 module.exports = router;
