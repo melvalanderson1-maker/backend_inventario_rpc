@@ -117,7 +117,12 @@ JOIN productos p ON p.id=lv.producto_id
 JOIN empresas e ON e.id=lv.empresa_id
 JOIN almacenes a ON a.id=lv.almacen_id
 LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
+JOIN categorias c ON c.id = p.categoria_id
+
 WHERE lv.stock_lote>0
+AND c.nombre <> 'ETIQUETAS'
+AND p.eliminado = 0
+AND p.activo = 1
 `;
 
 
