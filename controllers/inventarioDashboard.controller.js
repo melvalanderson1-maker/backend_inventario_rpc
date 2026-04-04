@@ -362,3 +362,37 @@ res.status(500).json({error:"Error productos stock"});
 }
 
 };
+
+
+
+// =====================================
+// VALOR INVENTARIO POR EMPRESA
+// =====================================
+
+exports.getValorPorEmpresa = async (req,res)=>{
+
+try{
+
+const [rows] = await pool.query(`
+
+SELECT
+empresa,
+ROUND(SUM(valor_lote),2) valor_inventario
+
+FROM (${BASE_QUERY}) t
+
+GROUP BY empresa
+ORDER BY valor_inventario DESC
+
+`);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error valor por empresa"});
+
+}
+
+};

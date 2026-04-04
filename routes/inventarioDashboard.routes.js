@@ -69,4 +69,11 @@ router.get(
   controller.getProductosStock
 );
 
+
+// VALOR POR EMPRESA (grafico gerencial)
+router.get(
+  "/valor-por-empresa",
+  controller.getValorPorEmpresa
+);
+
 module.exports = router;
