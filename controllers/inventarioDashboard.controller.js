@@ -3,10 +3,9 @@ const { initDB } = require("../config/db");
 let pool;
 (async () => pool = await initDB())();
 
-
-// =====================================
-// BASE QUERY (TU CONSULTA SQL)
-// =====================================
+/* =====================================================
+BASE QUERY
+===================================================== */
 
 const BASE_QUERY = `
 
@@ -76,6 +75,8 @@ SELECT
 
 p.codigo codigo_producto,
 p.descripcion producto,
+p.categoria_id,
+c.nombre categoria,
 
 e.nombre empresa,
 a.nombre almacen,
@@ -126,67 +127,64 @@ AND p.activo = 1
 `;
 
 
-// =====================================
-// KPIs
-// =====================================
+/* =====================================================
+FILTRO DINAMICO
+===================================================== */
 
-// =====================================
-// KPIs
-// =====================================
+function buildFilteredQuery(req){
+
+const { categoria } = req.query;
+
+let query = `SELECT * FROM (${BASE_QUERY}) t`;
+
+if(categoria){
+query += ` WHERE t.categoria_id = ${Number(categoria)}`;
+}
+
+return query;
+
+}
+
+
+/* =====================================================
+KPIs
+===================================================== */
 
 exports.getKPIs = async (req,res)=>{
 
 try{
 
+const filteredQuery = buildFilteredQuery(req);
+
 const [
-totalProductos,
-productosStock,
 valorInventario,
-inmovilizado
+inmovilizado,
+productosStock
 ] = await Promise.all([
 
-// TOTAL PRODUCTOS
-pool.query(`
-SELECT COUNT(*) total
-FROM productos
-WHERE eliminado = 0
-AND activo = 1
-`),
-
-// PRODUCTOS CON STOCK
-pool.query(`
-SELECT COUNT(DISTINCT p.codigo) total
-FROM stock_producto sp
-JOIN productos p ON p.id = sp.producto_id
-JOIN categorias c ON c.id = p.categoria_id
-WHERE sp.cantidad > 0
-AND p.eliminado = 0
-AND p.activo = 1
-AND c.nombre <> 'ETIQUETAS'
-`),
-
-// VALOR INVENTARIO
 pool.query(`
 SELECT ROUND(SUM(valor_lote),2) total
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 `),
 
-// INVENTARIO INMOVILIZADO
 pool.query(`
 SELECT COUNT(*) total
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 WHERE estado_rotacion='🔴 INVENTARIO INMOVILIZADO'
+`),
+
+pool.query(`
+SELECT COUNT(DISTINCT codigo_producto) total
+FROM (${filteredQuery}) t
 `)
+
 ]);
 
 res.json({
 
-productos: totalProductos[0][0].total,
-
+productos: productosStock[0][0].total,
 productos_con_stock: productosStock[0][0].total,
-
 valor: valorInventario[0][0].total || 0,
-
 inmovilizado: inmovilizado[0][0].total
 
 });
@@ -200,16 +198,19 @@ res.status(500).json({error:"Error KPIs"});
 
 };
 
-// =====================================
-// TOP PRODUCTOS POR VALOR
-// =====================================
+
+/* =====================================================
+TOP PRODUCTOS VALOR
+===================================================== */
+
 exports.getTopProductosValor = async (req,res)=>{
 
 try{
 
 const { tipo="mayor", limit=10 } = req.query;
-
 const order = tipo==="menor" ? "ASC" : "DESC";
+
+const filteredQuery = buildFilteredQuery(req);
 
 const [rows] = await pool.query(`
 
@@ -219,7 +220,7 @@ producto,
 MAX(stock_total_producto) stock_total_producto,
 MAX(valor_total_producto) valor_total_producto
 
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 
 GROUP BY codigo_producto,producto
 
@@ -240,13 +241,16 @@ res.status(500).json({error:"Error top productos"});
 
 };
 
-// =====================================
-// ROTACION
-// =====================================
+
+/* =====================================================
+ROTACION
+===================================================== */
 
 exports.getRotacion = async (req,res)=>{
 
 try{
+
+const filteredQuery = buildFilteredQuery(req);
 
 const [rows] = await pool.query(`
 
@@ -254,7 +258,7 @@ SELECT
 estado_rotacion estado,
 COUNT(*) total
 
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 
 GROUP BY estado_rotacion
 
@@ -272,51 +276,20 @@ res.status(500).json({error:"Error rotacion"});
 };
 
 
-// =====================================
-// HEATMAP
-// =====================================
-
-exports.getHeatmap = async (req,res)=>{
-
-try{
-
-const [rows] = await pool.query(`
-
-SELECT
-empresa,
-almacen,
-SUM(valor_lote) valor
-
-FROM (${BASE_QUERY}) t
-
-GROUP BY empresa,almacen
-
-`);
-
-res.json(rows);
-
-}catch(err){
-
-console.error(err);
-res.status(500).json({error:"Error heatmap"});
-
-}
-
-};
-
-
-// =====================================
-// TABLA COMPLETA INVENTARIO
-// =====================================
+/* =====================================================
+INVENTARIO
+===================================================== */
 
 exports.getInventario = async (req,res)=>{
 
 try{
 
+const filteredQuery = buildFilteredQuery(req);
+
 const [rows] = await pool.query(`
 
 SELECT *
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 ORDER BY valor_total_producto DESC
 
 `);
@@ -333,51 +306,19 @@ res.status(500).json({error:"Error inventario"});
 };
 
 
-// =====================================
-// DETALLE POR EMPRESA / ALMACEN
-// =====================================
-
-exports.getLotesByEmpresaAlmacen = async (req,res)=>{
-
-try{
-
-const { empresa, almacen } = req.query;
-
-const [rows] = await pool.query(`
-
-SELECT *
-FROM (${BASE_QUERY}) t
-WHERE empresa=? AND almacen=?
-ORDER BY valor_lote DESC
-
-`,[empresa,almacen]);
-
-res.json(rows);
-
-}catch(err){
-
-console.error(err);
-res.status(500).json({error:"Error detalle almacen"});
-
-}
-
-};
-
-
-// =====================================
-// PRODUCTOS POR STOCK (MAYOR / MENOR)
-// =====================================
+/* =====================================================
+PRODUCTOS POR STOCK
+===================================================== */
 
 exports.getProductosStock = async (req,res)=>{
 
 try{
 
-const {
-tipo = "mayor",
-limit = 10
-} = req.query;
+const { tipo="mayor",limit=10 } = req.query;
 
-const order = tipo === "menor" ? "ASC" : "DESC";
+const order = tipo==="menor" ? "ASC" : "DESC";
+
+const filteredQuery = buildFilteredQuery(req);
 
 const [rows] = await pool.query(`
 
@@ -387,7 +328,7 @@ producto,
 MAX(stock_total_producto) stock_total_producto,
 MAX(valor_total_producto) valor_total_producto
 
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 
 GROUP BY codigo_producto,producto
 
@@ -409,14 +350,15 @@ res.status(500).json({error:"Error productos stock"});
 };
 
 
-
-// =====================================
-// VALOR INVENTARIO POR EMPRESA
-// =====================================
+/* =====================================================
+VALOR POR EMPRESA
+===================================================== */
 
 exports.getValorPorEmpresa = async (req,res)=>{
 
 try{
+
+const filteredQuery = buildFilteredQuery(req);
 
 const [rows] = await pool.query(`
 
@@ -424,7 +366,7 @@ SELECT
 empresa,
 ROUND(SUM(valor_lote),2) valor_inventario
 
-FROM (${BASE_QUERY}) t
+FROM (${filteredQuery}) t
 
 GROUP BY empresa
 ORDER BY valor_inventario DESC
@@ -436,7 +378,7 @@ res.json(rows);
 }catch(err){
 
 console.error(err);
-res.status(500).json({error:"Error valor por empresa"});
+res.status(500).json({error:"Error valor empresa"});
 
 }
 
