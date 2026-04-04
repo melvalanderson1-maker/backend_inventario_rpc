@@ -155,6 +155,18 @@ try{
 
 const filteredQuery = buildFilteredQuery(req);
 
+/* filtro categoria */
+const { categoria } = req.query;
+
+let whereProductos = `
+WHERE eliminado = 0
+AND activo = 1
+`;
+
+if(categoria){
+whereProductos += ` AND categoria_id = ${categoria}`;
+}
+
 const [
 valorInventario,
 inmovilizado,
@@ -162,10 +174,14 @@ productosTotales,
 productosConStock
 ] = await Promise.all([
 
+/* VALOR INVENTARIO */
+
 pool.query(`
 SELECT ROUND(SUM(valor_lote),2) total
 FROM (${filteredQuery}) t
 `),
+
+/* INVENTARIO INMOVILIZADO */
 
 pool.query(`
 SELECT COUNT(*) total
@@ -173,10 +189,15 @@ FROM (${filteredQuery}) t
 WHERE estado_rotacion='🔴 INVENTARIO INMOVILIZADO'
 `),
 
+/* TOTAL PRODUCTOS CATALOGO */
+
 pool.query(`
-SELECT COUNT(DISTINCT codigo_producto) total
-FROM (${filteredQuery}) t
+SELECT COUNT(*) total
+FROM productos
+${whereProductos}
 `),
+
+/* PRODUCTOS CON STOCK */
 
 pool.query(`
 SELECT COUNT(DISTINCT codigo_producto) total
