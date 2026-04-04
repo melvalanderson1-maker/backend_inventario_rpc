@@ -149,7 +149,6 @@ return query;
 /* =====================================================
 KPIs
 ===================================================== */
-
 exports.getKPIs = async (req,res)=>{
 
 try{
@@ -159,7 +158,8 @@ const filteredQuery = buildFilteredQuery(req);
 const [
 valorInventario,
 inmovilizado,
-productosStock
+productosTotales,
+productosConStock
 ] = await Promise.all([
 
 pool.query(`
@@ -176,14 +176,20 @@ WHERE estado_rotacion='🔴 INVENTARIO INMOVILIZADO'
 pool.query(`
 SELECT COUNT(DISTINCT codigo_producto) total
 FROM (${filteredQuery}) t
+`),
+
+pool.query(`
+SELECT COUNT(DISTINCT codigo_producto) total
+FROM (${filteredQuery}) t
+WHERE stock_lote > 0
 `)
 
 ]);
 
 res.json({
 
-productos: productosStock[0][0].total,
-productos_con_stock: productosStock[0][0].total,
+productos: productosTotales[0][0].total,
+productos_con_stock: productosConStock[0][0].total,
 valor: valorInventario[0][0].total || 0,
 inmovilizado: inmovilizado[0][0].total
 
@@ -197,7 +203,6 @@ res.status(500).json({error:"Error KPIs"});
 }
 
 };
-
 
 /* =====================================================
 RESUMEN POR CATEGORIA
