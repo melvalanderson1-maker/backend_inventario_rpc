@@ -317,3 +317,48 @@ res.status(500).json({error:"Error detalle almacen"});
 }
 
 };
+
+
+// =====================================
+// PRODUCTOS POR STOCK (MAYOR / MENOR)
+// =====================================
+
+exports.getProductosStock = async (req,res)=>{
+
+try{
+
+const {
+tipo = "mayor",
+limit = 10
+} = req.query;
+
+const order = tipo === "menor" ? "ASC" : "DESC";
+
+const [rows] = await pool.query(`
+
+SELECT
+codigo_producto,
+producto,
+MAX(stock_total_producto) stock_total_producto,
+MAX(valor_total_producto) valor_total_producto
+
+FROM (${BASE_QUERY}) t
+
+GROUP BY codigo_producto,producto
+
+ORDER BY stock_total_producto ${order}
+
+LIMIT ?
+
+`,[Number(limit)]);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error productos stock"});
+
+}
+
+};

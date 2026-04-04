@@ -63,4 +63,10 @@ router.get(
   controller.getLotesByEmpresaAlmacen
 );
 
+// PRODUCTOS POR STOCK
+router.get(
+  "/productos-stock",
+  controller.getProductosStock
+);
+
 module.exports = router;
