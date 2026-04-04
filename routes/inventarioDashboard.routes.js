@@ -26,4 +26,6 @@ router.get("/productos-stock",controller.getProductosStock);
 
 router.get("/valor-por-empresa",controller.getValorPorEmpresa);
 
+router.get("/categorias-resumen", controller.getCategoriasResumen);
+
 module.exports = router;

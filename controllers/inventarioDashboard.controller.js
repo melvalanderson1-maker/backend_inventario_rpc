@@ -200,6 +200,46 @@ res.status(500).json({error:"Error KPIs"});
 
 
 /* =====================================================
+RESUMEN POR CATEGORIA
+===================================================== */
+
+exports.getCategoriasResumen = async (req,res)=>{
+
+try{
+
+const filteredQuery = buildFilteredQuery(req);
+
+const [rows] = await pool.query(`
+
+SELECT
+categoria_id,
+categoria,
+
+SUM(stock_lote) stock_total,
+
+ROUND(SUM(valor_lote),2) valor_total
+
+FROM (${filteredQuery}) t
+
+GROUP BY categoria_id,categoria
+
+ORDER BY stock_total DESC
+
+`);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error categorias resumen"});
+
+}
+
+};
+
+
+/* =====================================================
 TOP PRODUCTOS VALOR
 ===================================================== */
 
