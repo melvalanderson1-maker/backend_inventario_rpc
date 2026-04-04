@@ -130,22 +130,66 @@ AND p.activo = 1
 // KPIs
 // =====================================
 
+// =====================================
+// KPIs
+// =====================================
+
 exports.getKPIs = async (req,res)=>{
 
 try{
 
-const [rows] = await pool.query(`
+const [
+totalProductos,
+productosStock,
+valorInventario,
+inmovilizado
+] = await Promise.all([
 
-SELECT
-COUNT(DISTINCT codigo_producto) productos,
-SUM(valor_total_producto) valor,
-COUNT(CASE WHEN estado_rotacion='🔴 INVENTARIO INMOVILIZADO' THEN 1 END) inmovilizado
+// TOTAL PRODUCTOS
+pool.query(`
+SELECT COUNT(*) total
+FROM productos
+WHERE eliminado = 0
+AND activo = 1
+`),
 
+// PRODUCTOS CON STOCK
+pool.query(`
+SELECT COUNT(DISTINCT p.codigo) total
+FROM stock_producto sp
+JOIN productos p ON p.id = sp.producto_id
+JOIN categorias c ON c.id = p.categoria_id
+WHERE sp.cantidad > 0
+AND p.eliminado = 0
+AND p.activo = 1
+AND c.nombre <> 'ETIQUETAS'
+`),
+
+// VALOR INVENTARIO
+pool.query(`
+SELECT ROUND(SUM(valor_lote),2) total
 FROM (${BASE_QUERY}) t
+`),
 
-`);
+// INVENTARIO INMOVILIZADO
+pool.query(`
+SELECT COUNT(*) total
+FROM (${BASE_QUERY}) t
+WHERE estado_rotacion='🔴 INVENTARIO INMOVILIZADO'
+`)
+]);
 
-res.json(rows[0]);
+res.json({
+
+productos: totalProductos[0][0].total,
+
+productos_con_stock: productosStock[0][0].total,
+
+valor: valorInventario[0][0].total || 0,
+
+inmovilizado: inmovilizado[0][0].total
+
+});
 
 }catch(err){
 
@@ -156,14 +200,16 @@ res.status(500).json({error:"Error KPIs"});
 
 };
 
-
 // =====================================
 // TOP PRODUCTOS POR VALOR
 // =====================================
-
 exports.getTopProductosValor = async (req,res)=>{
 
 try{
+
+const { tipo="mayor", limit=10 } = req.query;
+
+const order = tipo==="menor" ? "ASC" : "DESC";
 
 const [rows] = await pool.query(`
 
@@ -177,11 +223,11 @@ FROM (${BASE_QUERY}) t
 
 GROUP BY codigo_producto,producto
 
-ORDER BY valor_total_producto DESC
+ORDER BY valor_total_producto ${order}
 
-LIMIT 10
+LIMIT ?
 
-`);
+`,[Number(limit)]);
 
 res.json(rows);
 
@@ -193,7 +239,6 @@ res.status(500).json({error:"Error top productos"});
 }
 
 };
-
 
 // =====================================
 // ROTACION
