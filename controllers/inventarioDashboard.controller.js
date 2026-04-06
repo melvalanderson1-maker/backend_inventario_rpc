@@ -35,82 +35,92 @@ WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
 
 ),
 
-movimientos_calculados AS (
+RECURSIVE kardex AS (
 
 SELECT
 
-*,
+producto_id,
+empresa_id,
+almacen_id,
+fabricante_id,
+rn,
+tipo_movimiento,
+cantidad,
+precio,
+fecha,
 
 CASE
 WHEN tipo_movimiento IN ('entrada','saldo_inicial')
 THEN cantidad
-WHEN tipo_movimiento='salida'
-THEN -cantidad
-END cantidad_mov
-
-FROM movimientos_ordenados
-
-),
-
-kardex_stock AS (
-
-SELECT
-
-*,
-
-SUM(cantidad_mov) OVER(
-PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
-ORDER BY fecha,rn
-) stock_acumulado
-
-FROM movimientos_calculados
-
-),
-
-kardex_valor AS (
-
-SELECT
-
-*,
+ELSE -cantidad
+END stock,
 
 CASE
 WHEN tipo_movimiento IN ('entrada','saldo_inicial')
-THEN cantidad * precio
+THEN cantidad*precio
 ELSE 0
-END valor_entrada
-
-FROM kardex_stock
-
-),
-
-kardex_valorizado AS (
-
-SELECT
-
-*,
-
-SUM(valor_entrada) OVER(
-PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
-ORDER BY fecha,rn
-) valor_acumulado
-
-FROM kardex_valor
-
-),
-
-precio_promedio AS (
-
-SELECT
-
-*,
+END valor,
 
 CASE
-WHEN stock_acumulado > 0
-THEN valor_acumulado / stock_acumulado
+WHEN tipo_movimiento IN ('entrada','saldo_inicial')
+THEN precio
 ELSE 0
 END costo_promedio
 
-FROM kardex_valorizado
+FROM movimientos_ordenados
+WHERE rn = 1
+
+
+UNION ALL
+
+
+SELECT
+
+m.producto_id,
+m.empresa_id,
+m.almacen_id,
+m.fabricante_id,
+m.rn,
+m.tipo_movimiento,
+m.cantidad,
+m.precio,
+m.fecha,
+
+k.stock +
+CASE
+WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+THEN m.cantidad
+ELSE -m.cantidad
+END stock,
+
+k.valor +
+CASE
+WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+THEN m.cantidad*m.precio
+ELSE -(m.cantidad * k.costo_promedio)
+END valor,
+
+CASE
+WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+THEN
+
+(
+(k.stock*k.costo_promedio)+(m.cantidad*m.precio)
+)
+/ (k.stock+m.cantidad)
+
+ELSE
+k.costo_promedio
+END costo_promedio
+
+FROM kardex k
+
+JOIN movimientos_ordenados m
+ON m.producto_id = k.producto_id
+AND m.empresa_id = k.empresa_id
+AND m.almacen_id = k.almacen_id
+AND (m.fabricante_id <=> k.fabricante_id)
+AND m.rn = k.rn + 1
 
 ),
 
@@ -128,7 +138,7 @@ PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
 ORDER BY fecha DESC,rn DESC
 ) r
 
-FROM precio_promedio
+FROM kardex
 
 ) x
 
@@ -147,10 +157,10 @@ e.nombre empresa,
 a.nombre almacen,
 f.nombre fabricante,
 
-sa.stock_acumulado stock_lote,
+sa.stock stock_lote,
 sa.costo_promedio precio_promedio_lote,
 
-ROUND(sa.stock_acumulado * sa.costo_promedio,2) valor_lote,
+ROUND(sa.stock * sa.costo_promedio,2) valor_lote,
 
 sa.fecha ultimo_movimiento_lote,
 
@@ -164,10 +174,10 @@ THEN '🟡 ROTACION LENTA'
 ELSE '🟢 ROTACION NORMAL'
 END estado_rotacion,
 
-SUM(sa.stock_acumulado) OVER(PARTITION BY sa.producto_id) stock_total_producto,
+SUM(sa.stock) OVER(PARTITION BY sa.producto_id) stock_total_producto,
 
 ROUND(
-SUM(sa.stock_acumulado * sa.costo_promedio)
+SUM(sa.stock * sa.costo_promedio)
 OVER(PARTITION BY sa.producto_id)
 ,2) valor_total_producto
 
@@ -179,7 +189,7 @@ JOIN almacenes a ON a.id = sa.almacen_id
 LEFT JOIN fabricantes f ON f.id = sa.fabricante_id
 JOIN categorias c ON c.id = p.categoria_id
 
-WHERE sa.stock_acumulado > 0
+WHERE sa.stock > 0
 AND c.nombre <> 'ETIQUETAS'
 AND p.eliminado = 0
 AND p.activo = 1
