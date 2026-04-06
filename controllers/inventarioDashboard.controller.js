@@ -3,112 +3,13 @@ const { initDB } = require("../config/db");
 let pool;
 (async () => pool = await initDB())();
 
+/* =====================================================
+BASE QUERY
+===================================================== */
+
 const BASE_QUERY = `
 
-WITH RECURSIVE movimientos_ordenados AS (
-
-SELECT
-producto_id,
-empresa_id,
-almacen_id,
-fabricante_id,
-tipo_movimiento,
-cantidad,
-COALESCE(precio,0) precio,
-
-CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00') fecha,
-
-ROW_NUMBER() OVER(
-PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
-ORDER BY fecha_validacion_logistica,id
-) rn
-
-FROM movimientos_inventario
-WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-
-),
-
-kardex AS (
-
-SELECT
-producto_id,
-empresa_id,
-almacen_id,
-fabricante_id,
-rn,
-tipo_movimiento,
-cantidad,
-precio,
-fecha,
-
-cantidad stock,
-cantidad*precio valor,
-precio costo_promedio
-
-FROM movimientos_ordenados
-WHERE rn=1
-
-UNION ALL
-
-SELECT
-m.producto_id,
-m.empresa_id,
-m.almacen_id,
-m.fabricante_id,
-m.rn,
-m.tipo_movimiento,
-m.cantidad,
-m.precio,
-m.fecha,
-
-CASE
-WHEN m.tipo_movimiento='salida'
-THEN k.stock-m.cantidad
-ELSE k.stock+m.cantidad
-END stock,
-
-CASE
-WHEN m.tipo_movimiento='salida'
-THEN k.valor-(m.cantidad*k.costo_promedio)
-ELSE k.valor+(m.cantidad*m.precio)
-END valor,
-
-CASE
-WHEN m.tipo_movimiento='salida'
-THEN k.costo_promedio
-ELSE (k.valor+(m.cantidad*m.precio))/(k.stock+m.cantidad)
-END costo_promedio
-
-FROM kardex k
-JOIN movimientos_ordenados m
-ON m.producto_id=k.producto_id
-AND m.empresa_id=k.empresa_id
-AND m.almacen_id=k.almacen_id
-AND (m.fabricante_id <=> k.fabricante_id)
-AND m.rn=k.rn+1
-
-),
-
-ultimo_estado AS (
-
-SELECT *
-FROM (
-
-SELECT
-*,
-ROW_NUMBER() OVER(
-PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
-ORDER BY rn DESC
-) r
-
-FROM kardex
-
-) x
-WHERE r=1
-
-),
-
-movimientos_lote AS (
+WITH movimientos_lote AS (
 
 SELECT
 producto_id,
@@ -119,20 +20,64 @@ fabricante_id,
 MAX(CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00')) ultimo_movimiento_lote,
 
 MAX(
-CASE
+CASE 
 WHEN tipo_movimiento='salida'
 THEN CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00')
 END
-) ultima_salida_lote
+) ultima_salida_lote,
+
+SUM(
+CASE 
+WHEN tipo_movimiento IN ('entrada','saldo_inicial')
+THEN cantidad 
+ELSE 0 
+END
+) total_entradas,
+
+SUM(
+CASE 
+WHEN tipo_movimiento IN ('entrada','saldo_inicial')
+THEN cantidad*precio 
+ELSE 0 
+END
+) total_costo
 
 FROM movimientos_inventario
 WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
 
 GROUP BY producto_id,empresa_id,almacen_id,fabricante_id
-
 ),
 
-resultado AS (
+lotes_valorizados AS (
+
+SELECT
+sp.producto_id,
+sp.empresa_id,
+sp.almacen_id,
+sp.fabricante_id,
+
+sp.cantidad stock_lote,
+
+ml.ultimo_movimiento_lote,
+ml.ultima_salida_lote,
+
+ROUND(
+COALESCE(ml.total_costo / NULLIF(ml.total_entradas,0),0),
+4
+) precio_promedio_lote
+
+FROM stock_producto sp
+
+LEFT JOIN movimientos_lote ml
+ON ml.producto_id=sp.producto_id
+AND ml.empresa_id=sp.empresa_id
+AND ml.almacen_id=sp.almacen_id
+AND (
+(ml.fabricante_id IS NULL AND sp.fabricante_id IS NULL)
+OR ml.fabricante_id=sp.fabricante_id
+)
+
+)
 
 SELECT
 
@@ -145,60 +90,49 @@ e.nombre empresa,
 a.nombre almacen,
 f.nombre fabricante,
 
-ue.stock stock_lote,
-ROUND(ue.costo_promedio,4) precio_promedio_lote,
+lv.stock_lote,
+lv.precio_promedio_lote,
 
-ROUND(ue.stock*ue.costo_promedio,2) valor_lote,
+ROUND(lv.stock_lote*lv.precio_promedio_lote,2) valor_lote,
 
-ml.ultimo_movimiento_lote,
+lv.ultimo_movimiento_lote,
 
-DATEDIFF(CURDATE(),ml.ultimo_movimiento_lote) dias_sin_movimiento,
+DATEDIFF(CURDATE(),lv.ultimo_movimiento_lote) dias_sin_movimiento,
 
-ml.ultima_salida_lote,
+lv.ultima_salida_lote,
 
 DATEDIFF(
 CURDATE(),
-COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote)
+COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote)
 ) dias_sin_salida,
 
 CASE
-WHEN DATEDIFF(CURDATE(),COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote))>90
-THEN 'INMOVILIZADO'
-WHEN DATEDIFF(CURDATE(),COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote))>30
-THEN 'ROTACION_LENTA'
-ELSE 'ROTACION_NORMAL'
+WHEN DATEDIFF(CURDATE(),COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote))>90
+THEN '🔴 INVENTARIO INMOVILIZADO'
+WHEN DATEDIFF(CURDATE(),COALESCE(lv.ultima_salida_lote,lv.ultimo_movimiento_lote))>30
+THEN '🟡 ROTACION LENTA'
+ELSE '🟢 ROTACION NORMAL'
 END estado_rotacion,
 
-SUM(ue.stock) OVER(PARTITION BY ue.producto_id) stock_total_producto,
+SUM(lv.stock_lote) OVER(PARTITION BY lv.producto_id) stock_total_producto,
 
 ROUND(
-SUM(ue.stock*ue.costo_promedio)
-OVER(PARTITION BY ue.producto_id),
+SUM(lv.stock_lote*lv.precio_promedio_lote)
+OVER(PARTITION BY lv.producto_id),
 2
 ) valor_total_producto
 
-FROM ultimo_estado ue
+FROM lotes_valorizados lv
+JOIN productos p ON p.id=lv.producto_id
+JOIN empresas e ON e.id=lv.empresa_id
+JOIN almacenes a ON a.id=lv.almacen_id
+LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
+JOIN categorias c ON c.id = p.categoria_id
 
-JOIN productos p ON p.id=ue.producto_id
-JOIN empresas e ON e.id=ue.empresa_id
-JOIN almacenes a ON a.id=ue.almacen_id
-LEFT JOIN fabricantes f ON f.id=ue.fabricante_id
-JOIN categorias c ON c.id=p.categoria_id
-
-LEFT JOIN movimientos_lote ml
-ON ml.producto_id=ue.producto_id
-AND ml.empresa_id=ue.empresa_id
-AND ml.almacen_id=ue.almacen_id
-AND (ml.fabricante_id <=> ue.fabricante_id)
-
-)
-
-SELECT *
-FROM resultado
-
-WHERE stock_lote>0
-AND categoria <> 'ETIQUETAS'
-
+WHERE lv.stock_lote>0
+AND c.nombre <> 'ETIQUETAS'
+AND p.eliminado = 0
+AND p.activo = 1
 `;
 
 /* =====================================================
