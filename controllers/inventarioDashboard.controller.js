@@ -5,7 +5,7 @@ let pool;
 
 const BASE_QUERY = `
 
-WITH movimientos_ordenados AS (
+WITH RECURSIVE movimientos_ordenados AS (
 
 SELECT
 producto_id,
@@ -14,13 +14,13 @@ almacen_id,
 fabricante_id,
 tipo_movimiento,
 cantidad,
-precio,
+COALESCE(precio,0) precio,
 
 CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00') fecha,
 
 ROW_NUMBER() OVER(
 PARTITION BY producto_id,empresa_id,almacen_id,fabricante_id
-ORDER BY fecha_validacion_logistica
+ORDER BY fecha_validacion_logistica,id
 ) rn
 
 FROM movimientos_inventario
@@ -106,37 +106,12 @@ FROM kardex
 ) x
 WHERE r=1
 
-),
-
-movimientos_lote AS (
-
-SELECT
-producto_id,
-empresa_id,
-almacen_id,
-fabricante_id,
-
-MAX(CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00')) ultimo_movimiento_lote,
-
-MAX(
-CASE
-WHEN tipo_movimiento='salida'
-THEN CONVERT_TZ(fecha_validacion_logistica,'+00:00','-05:00')
-END
-) ultima_salida_lote
-
-FROM movimientos_inventario
-WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-
-GROUP BY producto_id,empresa_id,almacen_id,fabricante_id
-
 )
 
 SELECT
 
 p.codigo codigo_producto,
 p.descripcion producto,
-p.categoria_id,
 c.nombre categoria,
 
 e.nombre empresa,
@@ -147,25 +122,6 @@ ue.stock stock_lote,
 ROUND(ue.costo_promedio,4) precio_promedio_lote,
 
 ROUND(ue.stock*ue.costo_promedio,2) valor_lote,
-
-ml.ultimo_movimiento_lote,
-
-DATEDIFF(CURDATE(),ml.ultimo_movimiento_lote) dias_sin_movimiento,
-
-ml.ultima_salida_lote,
-
-DATEDIFF(
-CURDATE(),
-COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote)
-) dias_sin_salida,
-
-CASE
-WHEN DATEDIFF(CURDATE(),COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote))>90
-THEN '🔴 INVENTARIO INMOVILIZADO'
-WHEN DATEDIFF(CURDATE(),COALESCE(ml.ultima_salida_lote,ml.ultimo_movimiento_lote))>30
-THEN '🟡 ROTACION LENTA'
-ELSE '🟢 ROTACION NORMAL'
-END estado_rotacion,
 
 SUM(ue.stock) OVER(PARTITION BY ue.producto_id) stock_total_producto,
 
@@ -182,12 +138,6 @@ JOIN empresas e ON e.id=ue.empresa_id
 JOIN almacenes a ON a.id=ue.almacen_id
 LEFT JOIN fabricantes f ON f.id=ue.fabricante_id
 JOIN categorias c ON c.id=p.categoria_id
-
-LEFT JOIN movimientos_lote ml
-ON ml.producto_id=ue.producto_id
-AND ml.empresa_id=ue.empresa_id
-AND ml.almacen_id=ue.almacen_id
-AND (ml.fabricante_id <=> ue.fabricante_id)
 
 WHERE ue.stock>0
 AND c.nombre <> 'ETIQUETAS'
