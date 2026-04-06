@@ -30,4 +30,9 @@ router.get("/valor-por-empresa",controller.getValorPorEmpresa);
 
 router.get("/categorias-resumen", controller.getCategoriasResumen);
 
+
+router.get("/abc-inventario",controller.getABCInventario);
+
+router.get("/heatmap-almacenes",controller.getHeatmapAlmacenes);
+
 module.exports = router;

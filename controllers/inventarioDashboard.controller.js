@@ -449,3 +449,114 @@ res.status(500).json({error:"Error valor empresa"});
 }
 
 };
+
+
+/* =====================================================
+ABC INVENTARIO (PARETO)
+===================================================== */
+
+exports.getABCInventario = async (req,res)=>{
+
+try{
+
+const filteredQuery = buildFilteredQuery(req);
+
+const [rows] = await pool.query(`
+
+WITH productos_valor AS (
+
+SELECT
+codigo_producto,
+producto,
+MAX(valor_total_producto) valor_total_producto
+
+FROM (${filteredQuery}) t
+
+GROUP BY codigo_producto,producto
+
+),
+
+ordenados AS (
+
+SELECT
+*,
+SUM(valor_total_producto) OVER() total_inventario,
+SUM(valor_total_producto) OVER(ORDER BY valor_total_producto DESC) acumulado
+
+FROM productos_valor
+
+),
+
+clasificacion AS (
+
+SELECT
+*,
+
+(acumulado/total_inventario)*100 porcentaje_acumulado
+
+FROM ordenados
+
+)
+
+SELECT
+
+CASE
+WHEN porcentaje_acumulado <=80 THEN 'A'
+WHEN porcentaje_acumulado <=95 THEN 'B'
+ELSE 'C'
+END categoria,
+
+COUNT(*) productos,
+ROUND(SUM(valor_total_producto),2) valor
+
+FROM clasificacion
+
+GROUP BY categoria
+
+ORDER BY categoria
+
+`);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error ABC inventario"});
+
+}
+
+};/* =====================================================
+HEATMAP ALMACENES
+===================================================== */
+
+exports.getHeatmapAlmacenes = async (req,res)=>{
+
+try{
+
+const filteredQuery = buildFilteredQuery(req);
+
+const [rows] = await pool.query(`
+
+SELECT
+almacen,
+ROUND(SUM(valor_lote),2) valor_inventario
+
+FROM (${filteredQuery}) t
+
+GROUP BY almacen
+
+ORDER BY valor_inventario DESC
+
+`);
+
+res.json(rows);
+
+}catch(err){
+
+console.error(err);
+res.status(500).json({error:"Error heatmap almacenes"});
+
+}
+
+};
