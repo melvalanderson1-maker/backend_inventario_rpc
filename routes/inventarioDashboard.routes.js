@@ -10,6 +10,8 @@ router.use(authMiddleware);
 router.use(
 rolMiddleware([
 "ADMIN_COMPRAS",
+"ADMIN_CONTABILIDAD",
+"ADMIN_LOGISTICA",
 "ADMIN_VENTAS"
 ])
 );
