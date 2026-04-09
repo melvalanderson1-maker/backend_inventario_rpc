@@ -1874,7 +1874,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
         "salida",
         cant,
         cant,
-        salida.nuevo_costo, // ✅ USAR COSTO PROMEDIO
+        salida.costo_anterior, // ✅ CORRECTO // ✅ USAR COSTO PROMEDIO
         salida.nuevo_stock,
         salida.nuevo_costo,
         salida.nuevo_valor,
@@ -1925,7 +1925,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
         "entrada",
         cant,
         cant,
-        salida.nuevo_costo, // 🔥 MISMO COSTO
+        salida.costo_anterior, // 🔥 MISMO COSTO
         entrada.nuevo_stock,
         entrada.nuevo_costo,
         entrada.nuevo_valor,
