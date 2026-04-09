@@ -6,6 +6,7 @@
   const { getOrCreate } = require("../utils/getOrCreate");
 
 
+  const { calcularCostoYStock } = require("../services/inventario.service");
 
   
 
@@ -1451,6 +1452,18 @@ crearMovimientoEntrada: async (req, res) => {
       throw new Error("Datos obligatorios incompletos");
     }
 
+    // 🔥 NUEVO (ANTES DEL INSERT)
+    const { nuevo_stock, nuevo_valor, nuevo_costo } =
+      await calcularCostoYStock(conn, {
+        producto_id: productoId,
+        empresa_id,
+        almacen_id,
+        fabricante_id,
+        cantidad: Number(cantidad),
+        precio: Number(precio || 0),
+        tipo: "entrada"
+      });
+
     await conn.query(
       `INSERT INTO movimientos_inventario (
         producto_id,
@@ -1461,6 +1474,9 @@ crearMovimientoEntrada: async (req, res) => {
         cantidad,
         cantidad_solicitada,
         precio,
+        stock_resultante,
+        costo_promedio_resultante,
+        valor_stock_resultante,
         op_vinculada,
         motivo_id,
         observaciones,
@@ -1468,7 +1484,7 @@ crearMovimientoEntrada: async (req, res) => {
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1476,8 +1492,14 @@ crearMovimientoEntrada: async (req, res) => {
         fabricante_id || null,
         "entrada",
         Number(cantidad),
-        Number(cantidad), // 👈 NUEVO
+        Number(cantidad),
         precio ? Number(precio) : null,
+
+        // 🔥 AQUÍ ESTÁ LA MAGIA
+        nuevo_stock,
+        nuevo_costo,
+        nuevo_valor,
+
         opFinal,
         motivo_id || null,
         observaciones || null,
@@ -1552,6 +1574,18 @@ crearMovimientoSaldoInicial: async (req, res) => {
     cantidad = Number(cantidad);
     if (cantidad <= 0) throw new Error("Cantidad inválida");
 
+    const { nuevo_stock, nuevo_valor, nuevo_costo } =
+      await calcularCostoYStock(conn, {
+        producto_id: productoId,
+        empresa_id,
+        almacen_id,
+        fabricante_id,
+        cantidad: Number(cantidad),
+        precio: Number(precio || 0),
+        tipo: "saldo_inicial"
+      });
+    
+
     const [resMov] = await conn.query(
       `INSERT INTO movimientos_inventario (
         producto_id,
@@ -1562,13 +1596,18 @@ crearMovimientoSaldoInicial: async (req, res) => {
         cantidad,
         cantidad_solicitada,
         precio,
+
+        stock_resultante,
+        costo_promedio_resultante,
+        valor_stock_resultante,
+
         motivo_id,
         observaciones,
         estado,
         usuario_creador_id,
         requiere_logistica,
         requiere_contabilidad
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         productoId,
         empresa_id,
@@ -1576,8 +1615,14 @@ crearMovimientoSaldoInicial: async (req, res) => {
         fabricante_id || null,
         "saldo_inicial",
         cantidad,
-        cantidad, // 👈 NUEVO
+        cantidad,
         precio ? Number(precio) : null,
+
+        // 🔥 ESTO ES LO QUE TE FALTABA
+        nuevo_stock,
+        nuevo_costo,
+        nuevo_valor,
+
         motivo_id || null,
         observaciones || null,
         "PENDIENTE_LOGISTICA",
@@ -1587,14 +1632,27 @@ crearMovimientoSaldoInicial: async (req, res) => {
       ]
     );
 
-    await actualizarStock(conn, {
-      producto_id: productoId,
+    await conn.query(`
+      INSERT INTO stock_producto (
+        producto_id, empresa_id, almacen_id, fabricante_id, cantidad, costo_promedio, valor_stock
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        cantidad = ?,
+        costo_promedio = ?,
+        valor_stock = ?
+    `, [
+      productoId,
       empresa_id,
       almacen_id,
-      fabricante_id,
-      cantidad,
-      tipo: "entrada"
-    });
+      fabricante_id || null,
+      nuevo_stock,
+      nuevo_costo,
+      nuevo_valor,
+      nuevo_stock,
+      nuevo_costo,
+      nuevo_valor
+    ]);
 
     await conn.commit();
     res.json({ ok: true });
@@ -1671,6 +1729,17 @@ crearMovimientoSalida: async (req, res) => {
       precio = null;
     }
 
+    const { nuevo_stock, nuevo_valor, nuevo_costo } =
+    await calcularCostoYStock(conn, {
+      producto_id: productoId,
+      empresa_id,
+      almacen_id,
+      fabricante_id,
+      cantidad: Number(cantidad),
+      precio: null,
+      tipo: "salida"
+    });
+
     await conn.query(
       `INSERT INTO movimientos_inventario (
         producto_id,
@@ -1681,6 +1750,11 @@ crearMovimientoSalida: async (req, res) => {
         cantidad,
         cantidad_solicitada,
         precio,
+
+        stock_resultante,
+        costo_promedio_resultante,
+        valor_stock_resultante,
+
         op_vinculada,
         motivo_id,
         observaciones,
@@ -1698,6 +1772,14 @@ crearMovimientoSalida: async (req, res) => {
         cantidad,
         cantidad, // 👈 NUEVO
         precio,
+
+
+        // 🔥 AQUÍ ESTÁ LA MAGIA
+        nuevo_stock,
+        nuevo_costo,
+        nuevo_valor,
+
+
         opFinal,
         motivo_id || null,
         observaciones || null,
