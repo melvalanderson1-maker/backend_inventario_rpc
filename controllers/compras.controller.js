@@ -1739,7 +1739,7 @@ crearMovimientoSalida: async (req, res) => {
         tipo_movimiento,
         cantidad,
         cantidad_solicitada,
-        costo_anterior,
+        costo_anterior,   // 👈 OK
 
         stock_resultante,
         costo_promedio_resultante,
@@ -1760,15 +1760,13 @@ crearMovimientoSalida: async (req, res) => {
         fabricante_id || null,
         "salida",
         cantidad,
-        cantidad, // 👈 NUEVO
-        precio,
+        cantidad,
 
+        costo_anterior, // ✅ AQUÍ ESTÁ LA CLAVE
 
-        // 🔥 AQUÍ ESTÁ LA MAGIA
         nuevo_stock,
         nuevo_costo,
         nuevo_valor,
-
 
         opFinal,
         motivo_id || null,
