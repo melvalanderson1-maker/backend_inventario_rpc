@@ -1642,27 +1642,6 @@ crearMovimientoSaldoInicial: async (req, res) => {
       ]
     );
 
-    await conn.query(`
-      INSERT INTO stock_producto (
-        producto_id, empresa_id, almacen_id, fabricante_id, cantidad, costo_promedio, valor_stock
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        cantidad = ?,
-        costo_promedio = ?,
-        valor_stock = ?
-    `, [
-      productoId,
-      empresa_id,
-      almacen_id,
-      fabricante_id || null,
-      nuevo_stock,
-      nuevo_costo,
-      nuevo_valor,
-      nuevo_stock,
-      nuevo_costo,
-      nuevo_valor
-    ]);
 
     await conn.commit();
     res.json({ ok: true });
