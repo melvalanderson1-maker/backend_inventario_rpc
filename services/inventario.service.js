@@ -51,8 +51,8 @@ async function calcularCostoYStock(conn, {
     nuevo_valor = Number((valor_actual + valor_entrada).toFixed(2));
 
     nuevo_costo = nuevo_stock > 0
-      ? (nuevo_valor / nuevo_stock)
-      : 0;
+    ? Number((nuevo_valor / nuevo_stock).toFixed(4))
+    : 0;
   }
 
   // ===============================

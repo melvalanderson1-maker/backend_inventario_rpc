@@ -1504,7 +1504,7 @@ crearMovimientoEntrada: async (req, res) => {
         "entrada",
         Number(cantidad),
         Number(cantidad),
-        precio ? Number(precio) : null,
+        precio ? Number(Number(precio).toFixed(2)) : null,
 
         // 🔥 AQUÍ ESTÁ LA MAGIA
         nuevo_stock,
@@ -1627,7 +1627,7 @@ crearMovimientoSaldoInicial: async (req, res) => {
         "saldo_inicial",
         cantidad,
         cantidad,
-        precio ? Number(precio) : null,
+        precio ? Number(Number(precio).toFixed(2)) : null,
 
         // 🔥 ESTO ES LO QUE TE FALTABA
         nuevo_stock,
@@ -1719,7 +1719,7 @@ crearMovimientoSalida: async (req, res) => {
       precio = null;
     }
 
-    const { nuevo_stock, nuevo_valor, nuevo_costo } =
+    const { nuevo_stock, nuevo_valor, nuevo_costo, costo_anterior }  =
     await calcularCostoYStock(conn, {
       producto_id: productoId,
       empresa_id,
@@ -1739,7 +1739,7 @@ crearMovimientoSalida: async (req, res) => {
         tipo_movimiento,
         cantidad,
         cantidad_solicitada,
-        precio,
+        costo_anterior,
 
         stock_resultante,
         costo_promedio_resultante,
