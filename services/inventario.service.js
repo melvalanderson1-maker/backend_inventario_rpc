@@ -87,7 +87,8 @@ async function calcularCostoYStock(conn, {
   return {
     nuevo_stock: Number(nuevo_stock),
     nuevo_valor: Number(nuevo_valor.toFixed(4)),
-    nuevo_costo: Number(nuevo_costo.toFixed(4))
+    nuevo_costo: Number(nuevo_costo.toFixed(4)),
+    costo_anterior: Number(costo_actual) // 👈 NUEVO
   };
 }
 

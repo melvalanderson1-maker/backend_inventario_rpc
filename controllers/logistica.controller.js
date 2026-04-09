@@ -1874,7 +1874,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
         "salida",
         cant,
         cant,
-        null,
+        salida.nuevo_costo, // ✅ USAR COSTO PROMEDIO
         salida.nuevo_stock,
         salida.nuevo_costo,
         salida.nuevo_valor,
@@ -1894,7 +1894,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
       almacen_id: almacenDestinoId,
       fabricante_id: fabricanteDestinoId,
       cantidad: cant,
-      precio: salida.nuevo_costo, // 🔥 CLAVE
+      precio: salida.costo_anterior, // 🔥 CLAVE
       tipo: "entrada"
     });
 
