@@ -7,10 +7,10 @@ async function calcularCostoYStock(conn, {
   fabricante_id,
   cantidad,
   precio,
-  tipo
+  tipo,
+  costo_referencia // 👈 NUEVO
 }) {
 
-  // 🔹 Buscar el último movimiento para obtener acumulados
   const [[ultimo]] = await conn.query(
     `SELECT stock_resultante, costo_promedio_resultante, valor_stock_resultante
      FROM movimientos_inventario
@@ -23,12 +23,10 @@ async function calcularCostoYStock(conn, {
     [producto_id, empresa_id, almacen_id, fabricante_id]
   );
 
-  // 🔹 Valores actuales
   let stock_actual = Number(ultimo?.stock_resultante) || 0;
   let costo_actual = Number(ultimo?.costo_promedio_resultante) || 0;
   let valor_actual = Number(ultimo?.valor_stock_resultante) || 0;
 
-  // 🔹 Inicializar nuevos valores
   let nuevo_stock = stock_actual;
   let nuevo_valor = valor_actual;
   let nuevo_costo = costo_actual;
@@ -37,7 +35,7 @@ async function calcularCostoYStock(conn, {
   precio = Number(precio) || 0;
 
   // ===============================
-  // ENTRADA O SALDO INICIAL
+  // ENTRADA / SALDO INICIAL
   // ===============================
   if (tipo === "entrada" || tipo === "saldo_inicial") {
 
@@ -46,11 +44,9 @@ async function calcularCostoYStock(conn, {
     nuevo_stock = stock_actual + cantidad;
     nuevo_valor = valor_actual + valor_entrada;
 
-    // Promedio ponderado
     nuevo_costo = nuevo_stock > 0
       ? (nuevo_valor / nuevo_stock)
       : 0;
-
   }
 
   // ===============================
@@ -59,7 +55,7 @@ async function calcularCostoYStock(conn, {
   else if (tipo === "salida") {
 
     if (stock_actual < cantidad) {
-      throw new Error("Stock insuficiente para realizar la salida");
+      throw new Error("Stock insuficiente");
     }
 
     const valor_salida = cantidad * costo_actual;
@@ -67,20 +63,31 @@ async function calcularCostoYStock(conn, {
     nuevo_stock = stock_actual - cantidad;
     nuevo_valor = valor_actual - valor_salida;
 
-    // El costo promedio NO cambia en salida
     nuevo_costo = costo_actual;
-
   }
 
-  // 🔹 Redondeo para evitar errores flotantes
-  nuevo_stock = Number(nuevo_stock);
-  nuevo_valor = Number(nuevo_valor.toFixed(4));
-  nuevo_costo = Number(nuevo_costo.toFixed(4));
+  // ===============================
+  // 🔥 TRASLADO (NUEVO)
+  // ===============================
+  else if (tipo === "traslado") {
+
+    if (stock_actual < cantidad) {
+      throw new Error("Stock insuficiente para traslado");
+    }
+
+    const costo = costo_referencia ?? costo_actual;
+    const valor = cantidad * costo;
+
+    nuevo_stock = stock_actual - cantidad;
+    nuevo_valor = valor_actual - valor;
+
+    nuevo_costo = costo_actual;
+  }
 
   return {
-    nuevo_stock,
-    nuevo_valor,
-    nuevo_costo
+    nuevo_stock: Number(nuevo_stock),
+    nuevo_valor: Number(nuevo_valor.toFixed(4)),
+    nuevo_costo: Number(nuevo_costo.toFixed(4))
   };
 }
 

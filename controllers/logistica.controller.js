@@ -547,9 +547,9 @@ validarMovimiento: async (req, res) => {
     );
 
 
-    const nuevo_stock = mov.stock_resultante;
-    const nuevo_costo = mov.costo_promedio_resultante;
-    const nuevo_valor = mov.valor_stock_resultante;
+  const nuevo_stock = mov.stock_resultante;
+  const nuevo_costo = mov.costo_promedio_resultante;
+  const nuevo_valor = mov.valor_stock_resultante;
 
 
     // ===================================================
@@ -1835,17 +1835,141 @@ validarCambioAlmacenConEdicion: async (req, res) => {
       [producto_id, empresaDestinoId, almacenDestinoId, fabricanteDestinoId, fabricanteDestinoId]
     );
 
-    // 📤 RESTAR ORIGEN
-    await conn.query(`UPDATE stock_producto SET cantidad = cantidad - ? WHERE id = ?`, [cant, stockOrigen.id]);
+    // ============================================
+    // 🔥 1. SALIDA DESDE ORIGEN (KARDEX REAL)
+    // ============================================
+    const salida = await calcularCostoYStock(conn, {
+      producto_id,
+      empresa_id: empresa_origen_id,
+      almacen_id: almacen_origen_id,
+      fabricante_id: fabricante_origen_id,
+      cantidad: cant,
+      tipo: "salida"
+    });
 
-    // 📥 SUMAR DESTINO
+    // 🔥 INSERT MOVIMIENTO SALIDA
+    await conn.query(
+      `INSERT INTO movimientos_inventario (
+        producto_id,
+        empresa_id,
+        almacen_id,
+        fabricante_id,
+        tipo_movimiento,
+        cantidad,
+        cantidad_solicitada,
+        precio,
+        stock_resultante,
+        costo_promedio_resultante,
+        valor_stock_resultante,
+        estado,
+        usuario_creador_id,
+        requiere_logistica,
+        requiere_contabilidad
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        producto_id,
+        empresa_origen_id,
+        almacen_origen_id,
+        fabricante_origen_id || null,
+        "salida",
+        cant,
+        cant,
+        null,
+        salida.nuevo_stock,
+        salida.nuevo_costo,
+        salida.nuevo_valor,
+        "VALIDADO_LOGISTICA",
+        usuarioId,
+        0,
+        1
+      ]
+    );
+
+    // ============================================
+    // 🔥 2. ENTRADA EN DESTINO (MISMO COSTO)
+    // ============================================
+    const entrada = await calcularCostoYStock(conn, {
+      producto_id,
+      empresa_id: empresaDestinoId,
+      almacen_id: almacenDestinoId,
+      fabricante_id: fabricanteDestinoId,
+      cantidad: cant,
+      precio: salida.nuevo_costo, // 🔥 CLAVE
+      tipo: "entrada"
+    });
+
+    // 🔥 INSERT MOVIMIENTO ENTRADA
+    await conn.query(
+      `INSERT INTO movimientos_inventario (
+        producto_id,
+        empresa_id,
+        almacen_id,
+        fabricante_id,
+        tipo_movimiento,
+        cantidad,
+        cantidad_solicitada,
+        precio,
+        stock_resultante,
+        costo_promedio_resultante,
+        valor_stock_resultante,
+        estado,
+        usuario_creador_id,
+        requiere_logistica,
+        requiere_contabilidad
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        producto_id,
+        empresaDestinoId,
+        almacenDestinoId,
+        fabricanteDestinoId || null,
+        "entrada",
+        cant,
+        cant,
+        salida.nuevo_costo, // 🔥 MISMO COSTO
+        entrada.nuevo_stock,
+        entrada.nuevo_costo,
+        entrada.nuevo_valor,
+        "VALIDADO_LOGISTICA",
+        usuarioId,
+        0,
+        1
+      ]
+    );
+
+    // ============================================
+    // 🔥 3. ACTUALIZAR STOCK_PRODUCTO (REFLEJO)
+    // ============================================
+
+    // ORIGEN
+    await conn.query(
+      `UPDATE stock_producto 
+      SET cantidad = ?, costo_promedio = ?, valor_stock = ?
+      WHERE id = ?`,
+      [salida.nuevo_stock, salida.nuevo_costo, salida.nuevo_valor, stockOrigen.id]
+    );
+
+    // DESTINO
     if (stockDestino) {
-      await conn.query(`UPDATE stock_producto SET cantidad = cantidad + ? WHERE id = ?`, [cant, stockDestino.id]);
+      await conn.query(
+        `UPDATE stock_producto 
+        SET cantidad = ?, costo_promedio = ?, valor_stock = ?
+        WHERE id = ?`,
+        [entrada.nuevo_stock, entrada.nuevo_costo, entrada.nuevo_valor, stockDestino.id]
+      );
     } else {
       await conn.query(
-        `INSERT INTO stock_producto (producto_id, empresa_id, almacen_id, fabricante_id, cantidad)
-         VALUES (?, ?, ?, ?, ?)`,
-        [producto_id, empresaDestinoId, almacenDestinoId, fabricanteDestinoId, cant]
+        `INSERT INTO stock_producto
+        (producto_id, empresa_id, almacen_id, fabricante_id, cantidad, costo_promedio, valor_stock)
+        VALUES (?,?,?,?,?,?,?)`,
+        [
+          producto_id,
+          empresaDestinoId,
+          almacenDestinoId,
+          fabricanteDestinoId,
+          entrada.nuevo_stock,
+          entrada.nuevo_costo,
+          entrada.nuevo_valor
+        ]
       );
     }
 
