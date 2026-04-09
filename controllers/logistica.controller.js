@@ -546,20 +546,9 @@ validarMovimiento: async (req, res) => {
       ]
     );
 
-
-    const recalculo = await calcularCostoYStock(conn, {
-      producto_id: mov.producto_id,
-      empresa_id: mov.empresa_id,
-      almacen_id: almacenFinal,
-      fabricante_id: mov.fabricante_id,
-      cantidad: cantidadReal,
-      precio: mov.precio,
-      tipo: tipo.toLowerCase()
-    });
-
-    const nuevo_stock = recalculo.nuevo_stock;
-    const nuevo_costo = recalculo.nuevo_costo;
-    const nuevo_valor = recalculo.nuevo_valor;
+    const nuevo_stock = mov.stock_resultante;
+    const nuevo_costo = mov.costo_promedio_resultante;
+    const nuevo_valor = mov.valor_stock_resultante;
 
 
     // ===================================================
