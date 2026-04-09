@@ -943,7 +943,6 @@ listarMotivosMovimiento: async (req, res) => {
 
   res.json(rows);
 },
-
 stockPorEmpresa: async (req, res) => {
   const { productoId } = req.query;
 
@@ -953,6 +952,8 @@ stockPorEmpresa: async (req, res) => {
       a.nombre AS almacen,
       f.nombre AS fabricante,
       sp.cantidad,
+      sp.costo_promedio,           -- ✅ costo unitario
+      sp.valor_stock,             -- ✅ saldo total
       sp.updated_at
     FROM stock_producto sp
     INNER JOIN empresas e ON e.id = sp.empresa_id
