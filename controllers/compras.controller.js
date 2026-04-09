@@ -550,7 +550,6 @@ crearProducto: async (req, res) => {
 
 
     
-
 listarMovimientos: async (req, res) => {
   try {
     const { productoId, estados } = req.query;
@@ -568,6 +567,12 @@ listarMovimientos: async (req, res) => {
         mi.op_vinculada,
         mi.cantidad,
         mi.precio,
+
+        -- 🔥 CAMPOS NUEVOS DEL COSTO PROMEDIO
+        mi.stock_resultante,
+        mi.costo_promedio_resultante,
+        mi.valor_stock_resultante,
+
         mi.estado,
         mi.created_at AS fecha_creacion,
         mi.fecha_validacion_logistica,
@@ -579,7 +584,7 @@ listarMovimientos: async (req, res) => {
 
         mi.observaciones AS observaciones_compras,
 
-        -- ✅ Observaciones de logística (original)
+        -- Observaciones de logística
         (
           SELECT vm.observaciones
           FROM validaciones_movimiento vm
@@ -589,11 +594,16 @@ listarMovimientos: async (req, res) => {
           LIMIT 1
         ) AS observaciones_logistica,
 
-        -- ✅ Último motivo de rechazo + usuario que lo hizo
+        -- Último motivo de rechazo
         vm_rechazo.observaciones AS motivo_rechazo,
-        CONCAT(u.nombre, ' ', u.apellido_paterno, ' ', u.apellido_materno) AS usuario_logistica,
 
-        -- 🔥 NUEVO: imagen de evidencia del movimiento
+        CONCAT(
+          u.nombre,' ',
+          u.apellido_paterno,' ',
+          u.apellido_materno
+        ) AS usuario_logistica,
+
+        -- 🔥 imágenes del movimiento
         (
           SELECT JSON_ARRAYAGG(
             JSON_OBJECT(
@@ -605,14 +615,14 @@ listarMovimientos: async (req, res) => {
             AND i.tipo = 'almacen'
         ) AS imagenes
 
-
       FROM movimientos_inventario mi
+
       INNER JOIN productos p ON p.id = mi.producto_id
       INNER JOIN empresas e ON e.id = mi.empresa_id
       LEFT JOIN almacenes a ON a.id = mi.almacen_id
       LEFT JOIN fabricantes f ON f.id = mi.fabricante_id
 
-      -- Última validación de logística (para motivo + usuario)
+      -- última validación logística
       LEFT JOIN (
         SELECT vm1.movimiento_id, vm1.observaciones, vm1.usuario_id
         FROM validaciones_movimiento vm1
@@ -637,9 +647,10 @@ listarMovimientos: async (req, res) => {
       params.push(...estadosArr);
     }
 
-    sql += " ORDER BY mi.created_at DESC";
+    sql += ` ORDER BY mi.created_at DESC`;
 
     const [rows] = await pool.query(sql, params);
+
     res.json(rows);
 
   } catch (error) {
@@ -647,7 +658,6 @@ listarMovimientos: async (req, res) => {
     res.status(500).json({ error: "Error obteniendo movimientos" });
   }
 },
-
 
 
 
