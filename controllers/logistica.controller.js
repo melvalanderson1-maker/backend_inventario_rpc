@@ -1,6 +1,8 @@
 const { initDB } = require("../config/db");
 const { uploadImage } = require("../services/storage.service");
 
+const { calcularCostoYStock } = require("../services/inventario.service");
+
 let pool;
 (async () => (pool = await initDB()))();
 
@@ -479,6 +481,8 @@ validarMovimiento: async (req, res) => {
 
     const tipo = mov.tipo_movimiento.toUpperCase();
 
+    
+
     // ===================================================
     // 📦 DETERMINAR ALMACÉN FINAL
     // ===================================================
@@ -543,55 +547,74 @@ validarMovimiento: async (req, res) => {
     );
 
 
+    const {
+      nuevo_stock,
+      nuevo_costo,
+      nuevo_valor
+    } = await calcularCostoYStock(conn, {
+      producto_id: mov.producto_id,
+      empresa_id: mov.empresa_id,
+      almacen_id: almacenFinal,
+      fabricante_id: mov.fabricante_id,
+      cantidad: cantidadReal,
+      precio: mov.precio,
+      tipo: tipo.toLowerCase()
+    });
+
+
     // ===================================================
     // 📥 SALDO INICIAL → REEMPLAZA STOCK
     // ===================================================
     if (tipo === "SALDO_INICIAL") {
       if (stockRow) {
         await conn.query(
-          `UPDATE stock_producto SET cantidad = ? WHERE id = ?`,
-          [cantidadReal, stockRow.id]
+          `UPDATE stock_producto 
+          SET cantidad = ?, costo_promedio = ?, valor_stock = ?
+          WHERE id = ?`,
+          [ nuevo_stock, nuevo_costo, nuevo_valor, stockRow.id ]
         );
       } else {
         await conn.query(
-          `
-          INSERT INTO stock_producto
-          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad)
-          VALUES (?,?,?,?,?)
-          `,
+          `INSERT INTO stock_producto
+          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad, costo_promedio, valor_stock)
+          VALUES (?,?,?,?,?,?,?)`,
           [
             mov.producto_id,
             mov.empresa_id,
             almacenFinal,
             mov.fabricante_id || null,
-            cantidadReal,
+            nuevo_stock,
+            nuevo_costo,
+            nuevo_valor
           ]
         );
       }
     }
-
     // ===================================================
     // 📥 ENTRADA / AJUSTE → SUMAN
     // ===================================================
+    // ✅ USAR VALOR FINAL YA CALCULADO
     if (["ENTRADA", "AJUSTE"].includes(tipo)) {
       if (stockRow) {
         await conn.query(
-          `UPDATE stock_producto SET cantidad = cantidad + ? WHERE id = ?`,
-          [cantidadReal, stockRow.id]
+          `UPDATE stock_producto 
+          SET cantidad = ?, costo_promedio = ?, valor_stock = ?
+          WHERE id = ?`,
+          [ nuevo_stock, nuevo_costo, nuevo_valor, stockRow.id ]
         );
       } else {
         await conn.query(
-          `
-          INSERT INTO stock_producto
-          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad)
-          VALUES (?,?,?,?,?)
-          `,
+          `INSERT INTO stock_producto
+          (producto_id, empresa_id, almacen_id, fabricante_id, cantidad, costo_promedio, valor_stock)
+          VALUES (?,?,?,?,?,?,?)`,
           [
             mov.producto_id,
             mov.empresa_id,
             almacenFinal,
             mov.fabricante_id || null,
-            cantidadReal,
+            nuevo_stock,
+            nuevo_costo,
+            nuevo_valor
           ]
         );
       }
@@ -604,42 +627,32 @@ validarMovimiento: async (req, res) => {
     // 📤 SALIDA → SOLO PERMITIR CAMBIAR CANTIDAD
     // ===================================================
     if (tipo === "SALIDA") {
-      // Verificar que exista stock en empresa, almacen y fabricante
-      const [[stock]] = await conn.query(
-        `
-        SELECT id, cantidad
-        FROM stock_producto
-        WHERE producto_id = ?
-          AND empresa_id = ?
-          AND almacen_id = ?
-          AND (
-            (? IS NULL AND fabricante_id IS NULL)
-            OR fabricante_id = ?
-          )
-        FOR UPDATE
-        `,
-        [mov.producto_id, mov.empresa_id, mov.almacen_id, mov.fabricante_id, mov.fabricante_id]
-      );
 
-      if (!stock) {
+      if (!stockRow) {
         throw new Error(
-          "❌ No existe stock para este producto en este almacén, empresa y fabricante."
+          "❌ No existe stock para este producto en este almacén."
         );
       }
 
-      if (cantidadReal > stock.cantidad) {
+      if (cantidadReal > stockRow.cantidad) {
         throw new Error(
-          `❌ Stock insuficiente. Disponible: ${stock.cantidad}. No puede validar esta salida.`
+          `❌ Stock insuficiente. Disponible: ${stockRow.cantidad}.`
         );
       }
 
-      // ⚠️ Restar solo la cantidad real validada
+      // 🔥 VALIDACIÓN PRO (EVITA ERRORES SILENCIOSOS)
+      if (nuevo_stock < 0) {
+        throw new Error("❌ Stock quedaría negativo");
+      }
+
+      // 🔥 USAR STOCK FINAL YA CALCULADO
       await conn.query(
-        `UPDATE stock_producto SET cantidad = cantidad - ? WHERE id = ?`,
-        [cantidadReal, stock.id]
+        `UPDATE stock_producto 
+        SET cantidad = ?, costo_promedio = ?, valor_stock = ?
+        WHERE id = ?`,
+        [nuevo_stock, nuevo_costo, nuevo_valor, stockRow.id]
       );
     }
-
 
     // ===================================================
     // 🗓 FECHA LOGÍSTICA
