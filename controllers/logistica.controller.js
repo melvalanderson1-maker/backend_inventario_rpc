@@ -1856,7 +1856,7 @@ validarCambioAlmacenConEdicion: async (req, res) => {
         tipo_movimiento,
         cantidad,
         cantidad_solicitada,
-        precio,
+        costo_anterior,
         stock_resultante,
         costo_promedio_resultante,
         valor_stock_resultante,
