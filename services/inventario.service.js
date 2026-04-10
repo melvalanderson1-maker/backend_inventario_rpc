@@ -26,7 +26,9 @@ async function calcularCostoYStock(conn, {
 
   let stock_actual = Number(ultimo?.stock_resultante) || 0;
   let costo_actual = Number(ultimo?.costo_promedio_resultante) || 0;
-  let valor_actual = Number(ultimo?.valor_stock_resultante) || 0;
+  let valor_actual = Number(
+    Number(ultimo?.valor_stock_resultante || 0).toFixed(2)
+  );
 
   let nuevo_stock = stock_actual;
   let nuevo_valor = valor_actual;
@@ -60,18 +62,19 @@ async function calcularCostoYStock(conn, {
       throw new Error("Stock insuficiente");
     }
 
-    // ✅ USAR COSTO REDONDEADO A 2 DECIMALES (IGUAL QUE UI)
     const costo_salida = Number(costo_actual.toFixed(2));
 
-    // ✅ VALOR CONSISTENTE CON UI
+    // 🔥 VALOR EXACTO
     const valor_salida = Number((cantidad * costo_salida).toFixed(2));
 
     nuevo_stock = stock_actual - cantidad;
 
-    // ✅ RESTA LIMPIA
-    nuevo_valor = Number((valor_actual - valor_salida).toFixed(4));
+    // 🔥 CLAVE: REDONDEAR ANTES Y DESPUÉS
+    const valor_actual_limpio = Number(valor_actual.toFixed(2));
 
-    nuevo_costo = costo_actual; // 🔥 NO CAMBIA
+    nuevo_valor = Number((valor_actual_limpio - valor_salida).toFixed(2));
+
+    nuevo_costo = Number(costo_actual.toFixed(2)); // opcional
   }
 
   // ===============================
@@ -97,9 +100,9 @@ async function calcularCostoYStock(conn, {
   // ===============================
   return {
     nuevo_stock: Number(nuevo_stock),
-    nuevo_valor: Number(nuevo_valor.toFixed(4)), // 🔥 SOLO AQUÍ
-    nuevo_costo: Number(nuevo_costo.toFixed(4)), // 🔥 SOLO AQUÍ
-    costo_anterior: Number(costo_actual.toFixed(4))
+    nuevo_valor: Number(nuevo_valor.toFixed(2)),
+    nuevo_costo: Number(nuevo_costo.toFixed(2)),
+    costo_anterior: Number(costo_actual.toFixed(2))
   };
 }
 
