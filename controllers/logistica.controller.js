@@ -545,10 +545,19 @@ validarMovimiento: async (req, res) => {
         mov.fabricante_id,
       ]
     );
-
-    const nuevo_stock = mov.stock_resultante;
-    const nuevo_costo = mov.costo_promedio_resultante;
-    const nuevo_valor = mov.valor_stock_resultante;
+    // ===================================================
+    // 🔥 RECALCULAR STOCK REAL (CLAVE DEL SISTEMA)
+    // ===================================================
+    const { nuevo_stock, nuevo_valor, nuevo_costo } =
+      await calcularCostoYStock(conn, {
+        producto_id: mov.producto_id,
+        empresa_id: mov.empresa_id,
+        almacen_id: almacenFinal,
+        fabricante_id: mov.fabricante_id,
+        cantidad: cantidadReal, // 🔥 USAR REAL, NO EL ORIGINAL
+        precio: mov.precio,
+        tipo: mov.tipo_movimiento.toLowerCase()
+      });
 
 
     // ===================================================
@@ -658,8 +667,14 @@ validarMovimiento: async (req, res) => {
       UPDATE movimientos_inventario
       SET
         cantidad_real = ?,
+
         cantidad = ?,
         almacen_id = ?,
+
+
+        stock_resultante = ?,
+        costo_promedio_resultante = ?,
+        valor_stock_resultante = ?,
         numero_orden = ?,
         op_vinculada = ?,
         estado = 'VALIDADO_LOGISTICA',
@@ -673,8 +688,12 @@ validarMovimiento: async (req, res) => {
         cantidadReal,
         cantidadReal,
         almacenFinal,
+
+        nuevo_stock,     
+        nuevo_costo,     
+        nuevo_valor,
         numero_orden || mov.numero_orden,
-        op_vinculada || mov.op_vinculada,
+        op_vinculada || mov.op_vinculada, 
         usuarioId,
         fechaLogistica,
         movimientoId,

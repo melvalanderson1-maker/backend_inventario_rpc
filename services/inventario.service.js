@@ -13,13 +13,14 @@ async function calcularCostoYStock(conn, {
 
   const [[ultimo]] = await conn.query(
     `SELECT stock_resultante, costo_promedio_resultante, valor_stock_resultante
-     FROM movimientos_inventario
-     WHERE producto_id = ?
-     AND empresa_id = ?
-     AND almacen_id = ?
-     AND (fabricante_id <=> ?)
-     ORDER BY id DESC
-     LIMIT 1`,
+      FROM movimientos_inventario
+      WHERE producto_id = ?
+      AND empresa_id = ?
+      AND almacen_id = ?
+      AND (fabricante_id <=> ?)
+      AND estado = 'VALIDADO_LOGISTICA'  -- 🔥 CLAVE
+      ORDER BY id DESC
+      LIMIT 1`,
     [producto_id, empresa_id, almacen_id, fabricante_id]
   );
 
