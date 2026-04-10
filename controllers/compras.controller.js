@@ -1071,6 +1071,19 @@ obtenerPrecioPorStock: async (req, res) => {
       return res.json({ precio_actual: null, historicos: [] });
     }
 
+    const [stockRows] = await pool.query(`
+      SELECT costo_promedio
+      FROM stock_producto
+      WHERE producto_id = ?
+        AND empresa_id = ?
+        AND almacen_id = ?
+        AND (
+          (fabricante_id IS NULL AND ? IS NULL)
+          OR fabricante_id = ?
+        )
+      LIMIT 1
+    `, [productoId, empresa_id, almacen_id, fabricante_id, fabricante_id]);
+
     const [rows] = await pool.query(
       `
       SELECT 
@@ -1095,7 +1108,9 @@ obtenerPrecioPorStock: async (req, res) => {
       [productoId, empresa_id, almacen_id, fabricante_id, fabricante_id]
     );
 
-    const precio_actual = rows.length ? rows[0].precio : null;
+    const precio_actual = stockRows.length
+    ? Number(stockRows[0].costo_promedio)
+    : (rows.length ? rows[0].precio : null);
 
     res.json({
       precio_actual,
