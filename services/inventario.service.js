@@ -26,9 +26,7 @@ async function calcularCostoYStock(conn, {
 
   let stock_actual = Number(ultimo?.stock_resultante) || 0;
   let costo_actual = Number(ultimo?.costo_promedio_resultante) || 0;
-  let valor_actual = Number(
-    Number(ultimo?.valor_stock_resultante || 0).toFixed(2)
-  );
+  let valor_actual = Number(ultimo?.valor_stock_resultante) || 0;
 
   let nuevo_stock = stock_actual;
   let nuevo_valor = valor_actual;
@@ -46,8 +44,11 @@ async function calcularCostoYStock(conn, {
     const valor_entrada = cantidad * precio;
 
     nuevo_stock = stock_actual + cantidad;
+
+    // 🔥 NO REDONDEAR AQUÍ
     nuevo_valor = valor_actual + valor_entrada;
 
+    // 🔥 COSTO PRECISO
     nuevo_costo = nuevo_stock > 0
       ? nuevo_valor / nuevo_stock
       : 0;
@@ -70,7 +71,7 @@ async function calcularCostoYStock(conn, {
     nuevo_stock = stock_actual - cantidad;
 
     // 🔥 CLAVE: REDONDEAR ANTES Y DESPUÉS
-    const valor_actual_limpio = Number(valor_actual.toFixed(2));
+    const valor_actual_limpio = Number(valor_actual.toFixed(4));
 
     nuevo_valor = Number((valor_actual_limpio - valor_salida).toFixed(2));
 
@@ -100,9 +101,9 @@ async function calcularCostoYStock(conn, {
   // ===============================
   return {
     nuevo_stock: Number(nuevo_stock),
-    nuevo_valor: Number(nuevo_valor.toFixed(2)),
-    nuevo_costo: Number(nuevo_costo.toFixed(2)),
-    costo_anterior: Number(costo_actual.toFixed(2))
+    nuevo_valor: Number(nuevo_valor.toFixed(4)), // 🔥 precisión
+    nuevo_costo: Number(nuevo_costo.toFixed(4)), // 🔥 precisión
+    costo_anterior: Number(costo_actual.toFixed(2)) // UI
   };
 }
 
