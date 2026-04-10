@@ -567,6 +567,7 @@ listarMovimientos: async (req, res) => {
         mi.op_vinculada,
         mi.cantidad,
         mi.precio,
+        mi.costo_anterior, 
 
         -- 🔥 CAMPOS NUEVOS DEL COSTO PROMEDIO
         mi.stock_resultante,
