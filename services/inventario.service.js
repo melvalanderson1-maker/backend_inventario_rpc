@@ -32,6 +32,7 @@ async function calcularCostoYStock(conn, {
   let nuevo_valor = valor_actual;
   let nuevo_costo = costo_actual;
 
+  // NORMALIZAR
   cantidad = Number(cantidad) || 0;
   precio = Number(precio) || 0;
 
@@ -40,20 +41,14 @@ async function calcularCostoYStock(conn, {
   // ===============================
   if (tipo === "entrada" || tipo === "saldo_inicial") {
 
-    // 🔥 REDONDEAR PRECIO
-    const precio_redondeado = Number(precio.toFixed(2));
-
-    // 🔥 VALOR EXACTO
-    const valor_entrada = Number((cantidad * precio_redondeado).toFixed(2));
+    const valor_entrada = cantidad * precio;
 
     nuevo_stock = stock_actual + cantidad;
-
-    // 🔥 REDONDEAR TOTAL
-    nuevo_valor = Number((valor_actual + valor_entrada).toFixed(2));
+    nuevo_valor = valor_actual + valor_entrada;
 
     nuevo_costo = nuevo_stock > 0
-    ? Number((nuevo_valor / nuevo_stock).toFixed(4))
-    : 0;
+      ? nuevo_valor / nuevo_stock
+      : 0;
   }
 
   // ===============================
@@ -65,22 +60,16 @@ async function calcularCostoYStock(conn, {
       throw new Error("Stock insuficiente");
     }
 
-    // 🔥 REDONDEAR COSTO A 2 DECIMALES (CLAVE)
-    const costo_redondeado = Number(costo_actual.toFixed(2));
-
-    // 🔥 CALCULAR VALOR SALIDA CON PRECISIÓN UI
-    const valor_salida = Number((cantidad * costo_redondeado).toFixed(2));
+    const valor_salida = cantidad * costo_actual;
 
     nuevo_stock = stock_actual - cantidad;
+    nuevo_valor = valor_actual - valor_salida;
 
-    // 🔥 TAMBIÉN REDONDEAR RESULTADO FINAL
-    nuevo_valor = Number((valor_actual - valor_salida).toFixed(2));
-
-    nuevo_costo = costo_actual; // no cambia
+    nuevo_costo = costo_actual;
   }
 
   // ===============================
-  // 🔥 TRASLADO (NUEVO)
+  // TRASLADO
   // ===============================
   else if (tipo === "traslado") {
 
@@ -97,11 +86,14 @@ async function calcularCostoYStock(conn, {
     nuevo_costo = costo_actual;
   }
 
+  // ===============================
+  // 🔥 ÚNICO REDONDEO (AQUÍ)
+  // ===============================
   return {
     nuevo_stock: Number(nuevo_stock),
-    nuevo_valor: Number(nuevo_valor.toFixed(2)),
-    nuevo_costo: Number(nuevo_costo.toFixed(4)),
-    costo_anterior: Number(costo_actual) // 👈 NUEVO
+    nuevo_valor: Number(nuevo_valor.toFixed(4)), // 🔥 SOLO AQUÍ
+    nuevo_costo: Number(nuevo_costo.toFixed(4)), // 🔥 SOLO AQUÍ
+    costo_anterior: Number(costo_actual.toFixed(4))
   };
 }
 
