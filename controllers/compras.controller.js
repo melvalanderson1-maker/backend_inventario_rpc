@@ -1139,7 +1139,9 @@ listarStockPorProducto: async (req, res) => {
       a.nombre AS almacen,
       sp.fabricante_id,
       f.nombre AS fabricante,
-      sp.cantidad
+      sp.cantidad,
+      sp.costo_promedio,   
+      sp.valor_stock           
     FROM stock_producto sp
     INNER JOIN empresas e ON e.id = sp.empresa_id
     INNER JOIN almacenes a ON a.id = sp.almacen_id
