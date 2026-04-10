@@ -60,12 +60,18 @@ async function calcularCostoYStock(conn, {
       throw new Error("Stock insuficiente");
     }
 
-    const valor_salida = cantidad * costo_actual;
+    // ✅ USAR COSTO REDONDEADO A 2 DECIMALES (IGUAL QUE UI)
+    const costo_salida = Number(costo_actual.toFixed(2));
+
+    // ✅ VALOR CONSISTENTE CON UI
+    const valor_salida = Number((cantidad * costo_salida).toFixed(2));
 
     nuevo_stock = stock_actual - cantidad;
-    nuevo_valor = valor_actual - valor_salida;
 
-    nuevo_costo = costo_actual;
+    // ✅ RESTA LIMPIA
+    nuevo_valor = Number((valor_actual - valor_salida).toFixed(4));
+
+    nuevo_costo = costo_actual; // 🔥 NO CAMBIA
   }
 
   // ===============================
