@@ -22,11 +22,21 @@ async function calcularCostoYStock(conn, {
       ORDER BY id DESC
       LIMIT 1`,
     [producto_id, empresa_id, almacen_id, fabricante_id]
+
+    
   );
+
+
+    // 🧪 DEBUG RESULTADO DEL ÚLTIMO MOVIMIENTO
+  console.log("ULTIMO MOVIMIENTO ENCONTRADO:", ultimo);
+
 
   let stock_actual = Number(ultimo?.stock_resultante) || 0;
   let costo_actual = Number(ultimo?.costo_promedio_resultante) || 0;
   let valor_actual = Number(ultimo?.valor_stock_resultante) || 0;
+
+
+  console.log("STOCK ACTUAL CALCULADO:", stock_actual);
 
   let nuevo_stock = stock_actual;
   let nuevo_valor = valor_actual;

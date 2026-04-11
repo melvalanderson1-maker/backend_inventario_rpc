@@ -545,6 +545,17 @@ validarMovimiento: async (req, res) => {
         mov.fabricante_id,
       ]
     );
+
+
+    // 🧪 DEBUG ANTES DE CALCULAR
+    console.log("DEBUG calcularCostoYStock params:", {
+      producto_id: mov.producto_id,
+      empresa_id: mov.empresa_id,
+      almacen_id: almacenFinal,
+      fabricante_id: mov.fabricante_id,
+      cantidad: cantidadReal,
+      tipo: mov.tipo_movimiento
+    });
     // ===================================================
     // 🔥 RECALCULAR STOCK REAL (CLAVE DEL SISTEMA)
     // ===================================================
