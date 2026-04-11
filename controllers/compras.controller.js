@@ -2307,7 +2307,9 @@ solicitarEliminacionProducto: async (req, res) => {
   } finally {
     conn.release();
   }
-},confirmarEliminacionProducto: async (req, res) => {
+},
+
+confirmarEliminacionProducto: async (req, res) => {
   const conn = await pool.getConnection();
 
   try {
@@ -2444,6 +2446,21 @@ solicitarEliminacionProducto: async (req, res) => {
            OR producto_id IN (
               SELECT id FROM productos WHERE producto_padre_id = ?
            )
+      `, [id, id]);
+
+
+      // ================================
+      // 🛑 VALIDACIONES DE CAMBIOS ALMACÉN (FALTANTE)
+      // ================================
+      await conn.query(`
+        DELETE FROM validaciones_cambios_almacen
+        WHERE cambio_id IN (
+          SELECT id FROM cambios_almacen
+          WHERE producto_id = ?
+            OR producto_id IN (
+                SELECT id FROM productos WHERE producto_padre_id = ?
+            )
+        )
       `, [id, id]);
 
       await conn.query(`
