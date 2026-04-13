@@ -154,6 +154,15 @@ return query;
 }
 
 
+function getPagination(req) {
+  const page = Number(req.query.page || 0);
+  const size = Number(req.query.size || 10);
+  const offset = page * size;
+
+  return { page, size, offset };
+}
+
+
 function addPagination(query, req) {
   const page = Number(req.query.page || 0);
   const size = Number(req.query.size || 10);
@@ -287,56 +296,46 @@ res.status(500).json({error:"Error categorias resumen"});
 TOP PRODUCTOS VALOR
 ===================================================== */
 
-exports.getTopProductosValor = async (req,res)=>{
+exports.getTopProductosValor = async (req, res) => {
+  try {
 
-try{
+    const { size, offset } = getPagination(req);
+    const order = req.query.order === "asc" ? "ASC" : "DESC";
 
-const page = Number(req.query.page || 0);
-const size = Number(req.query.size || 10);
-const offset = page * size;
+    const filteredQuery = buildFilteredQuery(req);
 
-const order = req.query.order === "asc" ? "ASC" : "DESC";
+    const [rows] = await pool.query(`
+      SELECT
+        codigo_producto,
+        producto,
+        MAX(stock_total_producto) stock_total_producto,
+        MAX(valor_total_producto) valor_total_producto
+      FROM (${filteredQuery}) t
+      GROUP BY codigo_producto, producto
+      ORDER BY valor_total_producto ${order}
+      LIMIT ? OFFSET ?
+    `, [size, offset]);
 
-const filteredQuery = buildFilteredQuery(req);
+    const [countRows] = await pool.query(`
+      SELECT COUNT(*) total FROM (
+        SELECT codigo_producto
+        FROM (${filteredQuery}) t
+        GROUP BY codigo_producto
+      ) x
+    `);
 
-const [rows] = await pool.query(`
+    const total = countRows[0].total;
 
-SELECT
-codigo_producto,
-producto,
-MAX(stock_total_producto) stock_total_producto,
-MAX(valor_total_producto) valor_total_producto
+    res.json({
+      data: rows,
+      hasMore: offset + size < total,
+      total
+    });
 
-FROM (${filteredQuery}) t
-
-GROUP BY codigo_producto,producto
-
-ORDER BY valor_total_producto ${order}
-LIMIT ? OFFSET ?
-
-`, [size, offset]);
-
-// 👇 IMPORTANTE: saber si hay más
-const [countRows] = await pool.query(`
-SELECT COUNT(*) total FROM (
-  SELECT codigo_producto
-  FROM (${filteredQuery}) t
-  GROUP BY codigo_producto
-) x
-`);
-
-const total = countRows[0].total;
-
-res.json({
-  data: rows,
-  hasMore: (offset + size) < total
-});
-
-}catch(err){
-console.error(err);
-res.status(500).json({error:"Error top productos"});
-}
-
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error top productos valor" });
+  }
 };
 
 /* =====================================================
@@ -379,24 +378,28 @@ INVENTARIO
 
 exports.getInventario = async (req, res) => {
   try {
+
+    const { size, offset } = getPagination(req);
     const filteredQuery = buildFilteredQuery(req);
 
-    const page = Number(req.query.page || 0);
-    const size = Number(req.query.size || 10);
-    const offset = page * size;
-
-    // 🔥 TRAEMOS UNO MÁS PARA SABER SI HAY SIGUIENTE PÁGINA
     const [rows] = await pool.query(`
-    SELECT *
-    FROM (${filteredQuery}) t
-    ORDER BY valor_total_producto DESC
-    LIMIT ? OFFSET ?
-    `, [size + 1, offset]);
+      SELECT *
+      FROM (${filteredQuery}) t
+      ORDER BY valor_total_producto DESC
+      LIMIT ? OFFSET ?
+    `, [size, offset]);
 
-    const hasMore = rows.length > size;
-    const data = rows.slice(0, size);
+    const [countRows] = await pool.query(`
+      SELECT COUNT(*) total FROM (${filteredQuery}) t
+    `);
 
-    res.json({ data, hasMore });
+    const total = countRows[0].total;
+
+    res.json({
+      data: rows,
+      hasMore: offset + size < total,
+      total
+    });
 
   } catch (err) {
     console.error(err);
@@ -408,55 +411,46 @@ exports.getInventario = async (req, res) => {
 PRODUCTOS POR STOCK
 ===================================================== */
 
-exports.getProductosStock = async (req,res)=>{
+exports.getProductosStock = async (req, res) => {
+  try {
 
-try{
+    const { size, offset } = getPagination(req);
+    const order = req.query.order === "asc" ? "ASC" : "DESC";
 
-const page = Number(req.query.page || 0);
-const size = Number(req.query.size || 10);
-const offset = page * size;
+    const filteredQuery = buildFilteredQuery(req);
 
-const order = req.query.order === "asc" ? "ASC" : "DESC";
+    const [rows] = await pool.query(`
+      SELECT
+        codigo_producto,
+        producto,
+        MAX(stock_total_producto) stock_total_producto,
+        MAX(valor_total_producto) valor_total_producto
+      FROM (${filteredQuery}) t
+      GROUP BY codigo_producto, producto
+      ORDER BY stock_total_producto ${order}
+      LIMIT ? OFFSET ?
+    `, [size, offset]);
 
-const filteredQuery = buildFilteredQuery(req);
+    const [countRows] = await pool.query(`
+      SELECT COUNT(*) total FROM (
+        SELECT codigo_producto
+        FROM (${filteredQuery}) t
+        GROUP BY codigo_producto
+      ) x
+    `);
 
-const [rows] = await pool.query(`
+    const total = countRows[0].total;
 
-SELECT
-codigo_producto,
-producto,
-MAX(stock_total_producto) stock_total_producto,
-MAX(valor_total_producto) valor_total_producto
+    res.json({
+      data: rows,
+      hasMore: offset + size < total,
+      total
+    });
 
-FROM (${filteredQuery}) t
-
-GROUP BY codigo_producto,producto
-
-ORDER BY stock_total_producto ${order}
-LIMIT ? OFFSET ?
-
-`, [size, offset]);
-
-const [countRows] = await pool.query(`
-SELECT COUNT(*) total FROM (
-  SELECT codigo_producto
-  FROM (${filteredQuery}) t
-  GROUP BY codigo_producto
-) x
-`);
-
-const total = countRows[0].total;
-
-res.json({
-  data: rows,
-  hasMore: (offset + size) < total
-});
-
-}catch(err){
-console.error(err);
-res.status(500).json({error:"Error productos stock"});
-}
-
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error productos stock" });
+  }
 };
 
 
