@@ -380,18 +380,40 @@ exports.getInventario = async (req, res) => {
   try {
 
     const { size, offset } = getPagination(req);
-    const filteredQuery = buildFilteredQuery(req);
+    const { producto, tipo } = req.query;
 
-    const [rows] = await pool.query(`
+    let query = `
       SELECT *
-      FROM (${filteredQuery}) t
-      ORDER BY valor_total_producto DESC
-      LIMIT ? OFFSET ?
-    `, [size, offset]);
+      FROM (${buildFilteredQuery(req)}) t
+    `;
 
-    const [countRows] = await pool.query(`
-      SELECT COUNT(*) total FROM (${filteredQuery}) t
-    `);
+    // 🔥 FILTRO CLAVE
+    if (producto) {
+      query += ` WHERE t.codigo_producto = '${producto}'`;
+    }
+
+    // 🔥 ORDEN DINÁMICO SEGÚN GRÁFICO
+    if (tipo === "stock") {
+      query += ` ORDER BY t.stock_total_producto DESC`;
+    } else {
+      query += ` ORDER BY t.valor_total_producto DESC`;
+    }
+
+    query += ` LIMIT ? OFFSET ?`;
+
+    const [rows] = await pool.query(query, [size, offset]);
+
+    // 🔥 COUNT TAMBIÉN FILTRADO
+    let countQuery = `
+      SELECT COUNT(*) total
+      FROM (${buildFilteredQuery(req)}) t
+    `;
+
+    if (producto) {
+      countQuery += ` WHERE t.codigo_producto = '${producto}'`;
+    }
+
+    const [countRows] = await pool.query(countQuery);
 
     const total = countRows[0].total;
 
