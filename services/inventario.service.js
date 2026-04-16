@@ -11,8 +11,17 @@ async function calcularCostoYStock(conn, {
   costo_referencia // 👈 NUEVO
 }) {
 
-  const [[ultimo]] = await conn.query(
-    `SELECT stock_resultante, costo_promedio_resultante, valor_stock_resultante
+  // 🔥 NORMALIZAR fabricante_id
+    if (
+      fabricante_id === "null" ||
+      fabricante_id === "" ||
+      fabricante_id === undefined
+    ) {
+      fabricante_id = null;
+    }
+
+    let [[ultimo]] = await conn.query(
+      `SELECT stock_resultante, costo_promedio_resultante, valor_stock_resultante
       FROM movimientos_inventario
       WHERE producto_id = ?
       AND empresa_id = ?
@@ -21,10 +30,25 @@ async function calcularCostoYStock(conn, {
       AND estado IN ('VALIDADO_LOGISTICA', 'APROBADO_FINAL')
       ORDER BY id DESC
       LIMIT 1`,
-    [producto_id, empresa_id, almacen_id, fabricante_id]
+      [producto_id, empresa_id, almacen_id, fabricante_id]
+    );
 
-    
-  );
+    // 🔥 FALLBACK SI NO ENCUENTRA Y ES NULL
+    if (!ultimo && fabricante_id === null) {
+      console.log("⚠️ FALLBACK SIN FABRICANTE");
+
+      [[ultimo]] = await conn.query(
+        `SELECT stock_resultante, costo_promedio_resultante, valor_stock_resultante
+        FROM movimientos_inventario
+        WHERE producto_id = ?
+        AND empresa_id = ?
+        AND almacen_id = ?
+        AND estado IN ('VALIDADO_LOGISTICA', 'APROBADO_FINAL')
+        ORDER BY id DESC
+        LIMIT 1`,
+        [producto_id, empresa_id, almacen_id]
+      );
+    }
 
 
     // 🧪 DEBUG RESULTADO DEL ÚLTIMO MOVIMIENTO
