@@ -4,23 +4,16 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 // LOGIN REAL
+const { v4: uuidv4 } = require("uuid");
+
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Faltan credenciales" });
-    }
-
     const db = await initDB();
 
     const [rows] = await db.query(`
-      SELECT 
-        u.id,
-        u.nombre,
-        u.email,
-        u.password,
-        r.nombre AS rol
+      SELECT u.id, u.nombre, u.email, u.password, r.nombre AS rol
       FROM usuarios u
       JOIN roles r ON r.id = u.rol_id
       WHERE u.email = ?
@@ -37,23 +30,32 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
+    // 🔥 NUEVO: generar session token
+    const sessionToken = uuidv4();
+
+    // 🔥 guardar en DB (mata sesiones anteriores)
+    await db.query(
+      "UPDATE usuarios SET session_token = ? WHERE id = ?",
+      [sessionToken, usuario.id]
+    );
+
     const token = jwt.sign(
       { id: usuario.id, rol: usuario.rol },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "1h" } // 🔥 cámbialo a 1 hora
     );
 
     res.json({
       token,
+      sessionToken, // 🔥 importante
       usuario: {
         id: usuario.id,
         nombre: usuario.nombre,
-        rol: usuario.rol  
+        rol: usuario.rol
       }
     });
 
   } catch (e) {
-    console.error(e);
     res.status(500).json({ message: "Error en login" });
   }
 };

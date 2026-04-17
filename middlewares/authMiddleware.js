@@ -1,24 +1,21 @@
 const jwt = require("jsonwebtoken");
+const { initDB } = require("../config/db");
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
 
-  // permitir preflight
   if (req.method === "OPTIONS") {
     return next();
   }
 
   const authHeader = req.headers.authorization;
-  console.log("AUTH HEADER:", authHeader);
-
-  console.log("URL:", req.originalUrl);
-  console.log("AUTH HEADER:", req.headers.authorization);
-
+  const sessionToken = req.headers["x-session-token"];
 
   if (!authHeader) {
     return res.status(401).json({ message: "No autorizado" });
   }
 
   const token = authHeader.split(" ")[1];
+
   if (!token) {
     return res.status(401).json({ message: "Token no enviado" });
   }
@@ -26,18 +23,27 @@ const authMiddleware = (req, res, next) => {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ✅ AQUÍ recién existe req.user
+    const db = await initDB();
+
+    const [rows] = await db.query(
+      "SELECT session_token FROM usuarios WHERE id = ?",
+      [payload.id]
+    );
+
+    if (!rows.length) {
+      return res.status(401).json({ message: "Usuario no existe" });
+    }
+
+    // 🔥 AQUÍ ESTÁ LA MAGIA
+    if (rows[0].session_token !== sessionToken) {
+      return res.status(401).json({ message: "Sesión inválida (cerrada por otro login)" });
+    }
+
     req.user = payload;
-    
-    console.log("✅ req.user listo para middleware:", req.user);
-
-    console.log("JWT PAYLOAD:", payload);
-
-    console.log("🔐 ROL EN TOKEN:", payload.rol); // 👈 ESTE ES EL IMPORTANTE
 
     next();
+
   } catch (error) {
-    console.error("JWT ERROR:", error);
     return res.status(401).json({ message: "Token inválido" });
   }
 };
