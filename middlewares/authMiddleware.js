@@ -35,8 +35,13 @@ const authMiddleware = async (req, res, next) => {
     }
 
     // 🔥 AQUÍ ESTÁ LA MAGIA
-    if (rows[0].session_token !== sessionToken) {
-      return res.status(401).json({ message: "Sesión inválida (cerrada por otro login)" });
+    // 🔥 solo validar si el header existe
+    if (!sessionToken) {
+      console.warn("⚠️ request sin sessionToken");
+    }
+
+    if (sessionToken && rows[0].session_token !== sessionToken) {
+      return res.status(401).json({ message: "Sesión inválida" });
     }
 
     req.user = payload;
