@@ -277,13 +277,23 @@ exports.getEntradasSalidasMes = async (req, res) => {
         img.storage_provider,
         img.storage_key,
 
+        /* 🔥 CANTIDAD DE MOVIMIENTOS (NO SUMA) */
+        COUNT(CASE 
+          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial') 
+          THEN 1 END) cantidad_entradas,
+
+        COUNT(CASE 
+          WHEN m.tipo_movimiento = 'salida' 
+          THEN 1 END) cantidad_salidas,
+
+        /* 🔥 OPCIONAL: MANTENER TAMBIÉN LA CANTIDAD REAL */
         SUM(CASE 
           WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
-          THEN m.cantidad ELSE 0 END) entradas,
+          THEN m.cantidad ELSE 0 END) total_entradas,
 
         SUM(CASE 
           WHEN m.tipo_movimiento = 'salida'
-          THEN m.cantidad ELSE 0 END) salidas
+          THEN m.cantidad ELSE 0 END) total_salidas
 
       FROM movimientos_inventario m
       JOIN productos p ON p.id = m.producto_id
@@ -296,7 +306,8 @@ exports.getEntradasSalidasMes = async (req, res) => {
         AND YEAR(m.fecha_validacion_logistica) = YEAR(CURDATE())
 
       GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
-      ORDER BY entradas DESC
+
+      ORDER BY cantidad_entradas DESC
     `);
 
     res.json(rows);
@@ -306,7 +317,6 @@ exports.getEntradasSalidasMes = async (req, res) => {
     res.status(500).json({ error: "Error entradas/salidas" });
   }
 };
-
 
 
 exports.getSinMovimiento = async (req, res) => {
