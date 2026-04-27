@@ -35,4 +35,18 @@ router.get("/abc-inventario",controller.getABCInventario);
 
 router.get("/heatmap-almacenes",controller.getHeatmapAlmacenes);
 
+
+
+// 🔵 NUEVOS ENDPOINTS DASHBOARD PRO
+
+router.get("/entradas-salidas", controller.getEntradasSalidasMes);
+
+router.get("/sin-movimiento", controller.getSinMovimiento);
+
+router.get("/ranking-antiguedad", controller.getRankingAntiguedad);
+
+// 🔥 DETALLE POR PRODUCTO (CLAVE)
+router.get("/movimientos-producto/:id", controller.getMovimientosProducto);
+
+
 module.exports = router;

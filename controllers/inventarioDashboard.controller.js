@@ -151,6 +151,7 @@ query += ` WHERE t.categoria_id = ${Number(categoria)}`;
 
 return query;
 
+
 }
 
 
@@ -170,6 +171,18 @@ function addPagination(query, req) {
   const offset = page * size;
 
   return `${query} LIMIT ${size} OFFSET ${offset}`;
+}
+
+
+function joinImagenProducto() {
+  return `
+    LEFT JOIN (
+      SELECT producto_id, storage_provider, storage_key
+      FROM imagenes
+      WHERE tipo = 'producto'
+      ORDER BY id ASC
+    ) img ON img.producto_id = p.id
+  `;
 }
 
 
@@ -251,6 +264,149 @@ res.status(500).json({error:"Error KPIs"});
 }
 
 };
+
+exports.getEntradasSalidasMes = async (req, res) => {
+  try {
+
+    const [rows] = await pool.query(`
+      SELECT
+        p.id producto_id,
+        p.codigo,
+        p.descripcion producto,
+
+        img.storage_provider,
+        img.storage_key,
+
+        SUM(CASE 
+          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+          THEN m.cantidad ELSE 0 END) entradas,
+
+        SUM(CASE 
+          WHEN m.tipo_movimiento = 'salida'
+          THEN m.cantidad ELSE 0 END) salidas
+
+      FROM movimientos_inventario m
+      JOIN productos p ON p.id = m.producto_id
+
+      ${joinImagenProducto()}
+
+      WHERE 
+        m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND MONTH(m.fecha_validacion_logistica) = MONTH(CURDATE())
+        AND YEAR(m.fecha_validacion_logistica) = YEAR(CURDATE())
+
+      GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
+      ORDER BY entradas DESC
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error entradas/salidas" });
+  }
+};
+
+
+
+exports.getSinMovimiento = async (req, res) => {
+  try {
+
+    const dias = Number(req.query.dias || 30);
+
+    const [rows] = await pool.query(`
+      SELECT t.*, img.storage_provider, img.storage_key
+      FROM (${buildFilteredQuery(req)}) t
+      JOIN productos p ON p.codigo = t.codigo_producto
+      LEFT JOIN imagenes img 
+        ON img.producto_id = p.id AND img.tipo='producto'
+      WHERE t.dias_sin_movimiento > ?
+      GROUP BY p.id
+      ORDER BY t.dias_sin_movimiento DESC
+    `, [dias]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error sin movimiento" });
+  }
+};
+
+
+
+exports.getRankingAntiguedad = async (req, res) => {
+  try {
+
+    const { size, offset } = getPagination(req);
+
+    const [rows] = await pool.query(`
+      SELECT
+        t.codigo_producto,
+        t.producto,
+
+        img.storage_provider,
+        img.storage_key,
+
+        MAX(t.dias_sin_movimiento) dias_max,
+        MAX(t.valor_total_producto) valor_total_producto
+
+      FROM (${buildFilteredQuery(req)}) t
+      JOIN productos p ON p.codigo = t.codigo_producto
+      LEFT JOIN imagenes img 
+        ON img.producto_id = p.id AND img.tipo='producto'
+
+      GROUP BY t.codigo_producto, t.producto, img.storage_provider, img.storage_key
+      ORDER BY dias_max DESC
+      LIMIT ? OFFSET ?
+    `, [size, offset]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error ranking antiguedad" });
+  }
+};
+
+
+
+exports.getMovimientosProducto = async (req, res) => {
+  try {
+
+    const productoId = req.params.id;
+
+    const [rows] = await pool.query(`
+      SELECT
+        m.id,
+        m.tipo_movimiento,
+        m.cantidad,
+        m.precio,
+        m.estado,
+        CONVERT_TZ(m.fecha_validacion_logistica,'+00:00','-05:00') fecha
+
+      FROM movimientos_inventario m
+      WHERE m.producto_id = ?
+      AND m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+
+      ORDER BY m.fecha_validacion_logistica DESC
+      LIMIT 50
+    `, [productoId]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error movimientos producto" });
+  }
+};
+
+
+
+
+
+
+
 
 /* =====================================================
 RESUMEN POR CATEGORIA
