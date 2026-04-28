@@ -135,6 +135,37 @@ AND p.eliminado = 0
 AND p.activo = 1
 `;
 
+
+
+
+
+const getFechaFiltro = (req) => {
+  const mes = req.query.mes; // formato: 2026-04
+
+  let inicio, fin;
+
+  if (mes) {
+    inicio = `${mes}-01`;
+
+    const date = new Date(mes + "-01");
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(0); // último día del mes
+
+    fin = date.toISOString().split("T")[0];
+  } else {
+    const hoy = new Date();
+
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+      .toISOString()
+      .split("T")[0];
+  }
+
+  return { inicio, fin };
+};
 /* =====================================================
 FILTRO DINAMICO
 ===================================================== */
@@ -675,33 +706,7 @@ res.status(500).json({error:"Error heatmap almacenes"});
 
 
 
-const getFechaFiltro = (req) => {
-  const mes = req.query.mes; // formato: 2026-04
 
-  let inicio, fin;
-
-  if (mes) {
-    inicio = `${mes}-01`;
-
-    const date = new Date(mes + "-01");
-    date.setMonth(date.getMonth() + 1);
-    date.setDate(0); // último día del mes
-
-    fin = date.toISOString().split("T")[0];
-  } else {
-    const hoy = new Date();
-
-    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-      .toISOString()
-      .split("T")[0];
-
-    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-      .toISOString()
-      .split("T")[0];
-  }
-
-  return { inicio, fin };
-};
 
 
 

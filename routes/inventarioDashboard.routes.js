@@ -40,7 +40,7 @@ router.get("/heatmap-almacenes",controller.getHeatmapAlmacenes);
 // 🔵 NUEVOS ENDPOINTS DASHBOARD PRO 
 
 
-router.get("/fecha-filtro", controller.getFechaFiltro);
+
 
 
 router.get("/entradas-salidas", controller.getEntradasSalidasMes);
