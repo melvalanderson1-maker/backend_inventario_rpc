@@ -668,41 +668,34 @@ res.status(500).json({error:"Error ABC inventario"});
 
 }
 
-};/* =====================================================
+};
+
+
+/* =====================================================
 HEATMAP ALMACENES
 ===================================================== */
 
 exports.getHeatmapAlmacenes = async (req,res)=>{
+  try{
 
-try{
+    const filteredQuery = buildFilteredQuery(req);
 
-const filteredQuery = buildFilteredQuery(req);
+    const [rows] = await pool.query(`
+      SELECT
+        almacen,
+        ROUND(SUM(valor_lote),2) valor_inventario
+      FROM (${filteredQuery}) t
+      GROUP BY almacen
+      ORDER BY valor_inventario DESC
+    `);
 
-const [rows] = await pool.query(`
+    res.json(rows);
 
-SELECT
-almacen,
-ROUND(SUM(valor_lote),2) valor_inventario
-
-FROM (${filteredQuery}) t
-
-GROUP BY almacen
-
-ORDER BY valor_inventario DESC
-
-`);
-
-res.json(rows);
-
-}catch(err){
-
-console.error(err);
-res.status(500).json({error:"Error heatmap almacenes"});
-
-}
-
-
-
+  }catch(err){
+    console.error(err);
+    res.status(500).json({error:"Error heatmap almacenes"});
+  }
+}; // ✅ ← ESTE ES EL IMPORTANTE
 
 
 
@@ -829,4 +822,3 @@ exports.getRankingAntiguedad = async (req, res) => {
 };
 
 
-};
