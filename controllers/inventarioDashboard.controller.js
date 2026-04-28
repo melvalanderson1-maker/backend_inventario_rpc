@@ -744,7 +744,7 @@ exports.getEntradasSalidasMes = async (req, res) => {
 
       GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
 
-      ORDER BY cantidad_entradas DESC
+      ORDER BY total_entradas DESC
     `, [inicio, fin]);
 
     res.json(rows);
@@ -755,24 +755,26 @@ exports.getEntradasSalidasMes = async (req, res) => {
   }
 };
 
+
 exports.getSinMovimiento = async (req, res) => {
   try {
 
     const dias = Number(req.query.dias || 30);
-    const { inicio, fin } = getFechaFiltro(req);
 
     const [rows] = await pool.query(`
-      SELECT t.*, img.storage_provider, img.storage_key
+      SELECT 
+        t.*,
+        img.storage_provider,
+        img.storage_key
       FROM (${buildFilteredQuery(req)}) t
       JOIN productos p ON p.codigo = t.codigo_producto
       LEFT JOIN imagenes img 
         ON img.producto_id = p.id AND img.tipo='producto'
-      WHERE 
-        t.dias_sin_movimiento > ?
-        AND DATE(t.fecha_validacion) BETWEEN ? AND ?
-      GROUP BY p.id
+
+      WHERE t.dias_sin_movimiento > ?
+
       ORDER BY t.dias_sin_movimiento DESC
-    `, [dias, inicio, fin]);
+    `, [dias]);
 
     res.json(rows);
 
@@ -785,8 +787,6 @@ exports.getSinMovimiento = async (req, res) => {
 
 exports.getRankingAntiguedad = async (req, res) => {
   try {
-
-    const { inicio, fin } = getFechaFiltro(req);
 
     const { size, offset } = getPagination(req);
 
@@ -806,12 +806,16 @@ exports.getRankingAntiguedad = async (req, res) => {
       LEFT JOIN imagenes img 
         ON img.producto_id = p.id AND img.tipo='producto'
 
-      WHERE DATE(t.fecha_validacion) BETWEEN ? AND ?
+      GROUP BY 
+        t.codigo_producto, 
+        t.producto, 
+        img.storage_provider, 
+        img.storage_key
 
-      GROUP BY t.codigo_producto, t.producto, img.storage_provider, img.storage_key
       ORDER BY dias_max DESC
+
       LIMIT ? OFFSET ?
-    `, [inicio, fin, size, offset]);
+    `, [size, offset]);
 
     res.json(rows);
 
@@ -820,5 +824,3 @@ exports.getRankingAntiguedad = async (req, res) => {
     res.status(500).json({ error: "Error ranking antiguedad" });
   }
 };
-
-
