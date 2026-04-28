@@ -702,7 +702,6 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 
 
 
-
 exports.getEntradasSalidasMes = async (req, res) => {
   try {
 
@@ -718,7 +717,7 @@ exports.getEntradasSalidasMes = async (req, res) => {
         img.storage_key,
 
         COUNT(CASE 
-          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial') 
+          WHEN m.tipo_movimiento = 'entrada' 
           THEN 1 END) cantidad_entradas,
 
         COUNT(CASE 
@@ -726,7 +725,7 @@ exports.getEntradasSalidasMes = async (req, res) => {
           THEN 1 END) cantidad_salidas,
 
         SUM(CASE 
-          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+          WHEN m.tipo_movimiento = 'entrada'
           THEN m.cantidad ELSE 0 END) total_entradas,
 
         SUM(CASE 
@@ -740,6 +739,7 @@ exports.getEntradasSalidasMes = async (req, res) => {
 
       WHERE 
         m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND m.fecha_validacion_logistica IS NOT NULL
         AND DATE(m.fecha_validacion_logistica) BETWEEN ? AND ?
 
       GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
@@ -752,6 +752,43 @@ exports.getEntradasSalidasMes = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error entradas/salidas" });
+  }
+};
+
+
+exports.getStockInicial = async (req, res) => {
+  try {
+
+    const { inicio } = getFechaFiltro(req);
+
+    const [rows] = await pool.query(`
+      SELECT 
+        SUM(stock) AS stock_inicial_total
+      FROM (
+        SELECT 
+          producto_id,
+          SUM(
+            CASE 
+              WHEN tipo_movimiento IN ('entrada','saldo_inicial') THEN cantidad
+              WHEN tipo_movimiento = 'salida' THEN -cantidad
+            END
+          ) AS stock
+        FROM movimientos_inventario
+        WHERE 
+          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND fecha_validacion_logistica IS NOT NULL
+          AND fecha_validacion_logistica < ?
+        GROUP BY producto_id
+      ) t
+    `, [inicio]);
+
+    res.json({
+      stock_inicial: rows[0]?.stock_inicial_total || 0
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error stock inicial" });
   }
 };
 
