@@ -265,121 +265,6 @@ res.status(500).json({error:"Error KPIs"});
 
 };
 
-exports.getEntradasSalidasMes = async (req, res) => {
-  try {
-
-    const [rows] = await pool.query(`
-      SELECT
-        p.id producto_id,
-        p.codigo,
-        p.descripcion producto,
-
-        img.storage_provider,
-        img.storage_key,
-
-        /* 🔥 CANTIDAD DE MOVIMIENTOS (NO SUMA) */
-        COUNT(CASE 
-          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial') 
-          THEN 1 END) cantidad_entradas,
-
-        COUNT(CASE 
-          WHEN m.tipo_movimiento = 'salida' 
-          THEN 1 END) cantidad_salidas,
-
-        /* 🔥 OPCIONAL: MANTENER TAMBIÉN LA CANTIDAD REAL */
-        SUM(CASE 
-          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
-          THEN m.cantidad ELSE 0 END) total_entradas,
-
-        SUM(CASE 
-          WHEN m.tipo_movimiento = 'salida'
-          THEN m.cantidad ELSE 0 END) total_salidas
-
-      FROM movimientos_inventario m
-      JOIN productos p ON p.id = m.producto_id
-
-      ${joinImagenProducto()}
-
-      WHERE 
-        m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND MONTH(m.fecha_validacion_logistica) = MONTH(CURDATE())
-        AND YEAR(m.fecha_validacion_logistica) = YEAR(CURDATE())
-
-      GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
-
-      ORDER BY cantidad_entradas DESC
-    `);
-
-    res.json(rows);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error entradas/salidas" });
-  }
-};
-
-
-exports.getSinMovimiento = async (req, res) => {
-  try {
-
-    const dias = Number(req.query.dias || 30);
-
-    const [rows] = await pool.query(`
-      SELECT t.*, img.storage_provider, img.storage_key
-      FROM (${buildFilteredQuery(req)}) t
-      JOIN productos p ON p.codigo = t.codigo_producto
-      LEFT JOIN imagenes img 
-        ON img.producto_id = p.id AND img.tipo='producto'
-      WHERE t.dias_sin_movimiento > ?
-      GROUP BY p.id
-      ORDER BY t.dias_sin_movimiento DESC
-    `, [dias]);
-
-    res.json(rows);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error sin movimiento" });
-  }
-};
-
-
-
-exports.getRankingAntiguedad = async (req, res) => {
-  try {
-
-    const { size, offset } = getPagination(req);
-
-    const [rows] = await pool.query(`
-      SELECT
-        t.codigo_producto,
-        t.producto,
-
-        img.storage_provider,
-        img.storage_key,
-
-        MAX(t.dias_sin_movimiento) dias_max,
-        MAX(t.valor_total_producto) valor_total_producto
-
-      FROM (${buildFilteredQuery(req)}) t
-      JOIN productos p ON p.codigo = t.codigo_producto
-      LEFT JOIN imagenes img 
-        ON img.producto_id = p.id AND img.tipo='producto'
-
-      GROUP BY t.codigo_producto, t.producto, img.storage_provider, img.storage_key
-      ORDER BY dias_max DESC
-      LIMIT ? OFFSET ?
-    `, [size, offset]);
-
-    res.json(rows);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error ranking antiguedad" });
-  }
-};
-
-
 
 exports.getMovimientosProducto = async (req, res) => {
   try {
@@ -784,5 +669,159 @@ console.error(err);
 res.status(500).json({error:"Error heatmap almacenes"});
 
 }
+
+
+
+
+
+
+const getFechaFiltro = (req) => {
+  const mes = req.query.mes; // formato: 2026-04
+
+  let inicio, fin;
+
+  if (mes) {
+    inicio = `${mes}-01`;
+
+    const date = new Date(mes + "-01");
+    date.setMonth(date.getMonth() + 1);
+    date.setDate(0); // último día del mes
+
+    fin = date.toISOString().split("T")[0];
+  } else {
+    const hoy = new Date();
+
+    inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      .toISOString()
+      .split("T")[0];
+
+    fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+      .toISOString()
+      .split("T")[0];
+  }
+
+  return { inicio, fin };
+};
+
+
+
+exports.getEntradasSalidasMes = async (req, res) => {
+  try {
+
+    const { inicio, fin } = getFechaFiltro(req);
+
+    const [rows] = await pool.query(`
+      SELECT
+        p.id producto_id,
+        p.codigo,
+        p.descripcion producto,
+
+        img.storage_provider,
+        img.storage_key,
+
+        COUNT(CASE 
+          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial') 
+          THEN 1 END) cantidad_entradas,
+
+        COUNT(CASE 
+          WHEN m.tipo_movimiento = 'salida' 
+          THEN 1 END) cantidad_salidas,
+
+        SUM(CASE 
+          WHEN m.tipo_movimiento IN ('entrada','saldo_inicial')
+          THEN m.cantidad ELSE 0 END) total_entradas,
+
+        SUM(CASE 
+          WHEN m.tipo_movimiento = 'salida'
+          THEN m.cantidad ELSE 0 END) total_salidas
+
+      FROM movimientos_inventario m
+      JOIN productos p ON p.id = m.producto_id
+
+      ${joinImagenProducto()}
+
+      WHERE 
+        m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND DATE(m.fecha_validacion_logistica) BETWEEN ? AND ?
+
+      GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
+
+      ORDER BY cantidad_entradas DESC
+    `, [inicio, fin]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error entradas/salidas" });
+  }
+};
+
+exports.getSinMovimiento = async (req, res) => {
+  try {
+
+    const dias = Number(req.query.dias || 30);
+    const { inicio, fin } = getFechaFiltro(req);
+
+    const [rows] = await pool.query(`
+      SELECT t.*, img.storage_provider, img.storage_key
+      FROM (${buildFilteredQuery(req)}) t
+      JOIN productos p ON p.codigo = t.codigo_producto
+      LEFT JOIN imagenes img 
+        ON img.producto_id = p.id AND img.tipo='producto'
+      WHERE 
+        t.dias_sin_movimiento > ?
+        AND DATE(t.fecha_validacion) BETWEEN ? AND ?
+      GROUP BY p.id
+      ORDER BY t.dias_sin_movimiento DESC
+    `, [dias, inicio, fin]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error sin movimiento" });
+  }
+};
+
+
+exports.getRankingAntiguedad = async (req, res) => {
+  try {
+
+    const { inicio, fin } = getFechaFiltro(req);
+
+    const { size, offset } = getPagination(req);
+
+    const [rows] = await pool.query(`
+      SELECT
+        t.codigo_producto,
+        t.producto,
+
+        img.storage_provider,
+        img.storage_key,
+
+        MAX(t.dias_sin_movimiento) dias_max,
+        MAX(t.valor_total_producto) valor_total_producto
+
+      FROM (${buildFilteredQuery(req)}) t
+      JOIN productos p ON p.codigo = t.codigo_producto
+      LEFT JOIN imagenes img 
+        ON img.producto_id = p.id AND img.tipo='producto'
+
+      WHERE DATE(t.fecha_validacion) BETWEEN ? AND ?
+
+      GROUP BY t.codigo_producto, t.producto, img.storage_provider, img.storage_key
+      ORDER BY dias_max DESC
+      LIMIT ? OFFSET ?
+    `, [inicio, fin, size, offset]);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error ranking antiguedad" });
+  }
+};
+
 
 };
