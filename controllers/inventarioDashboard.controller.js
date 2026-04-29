@@ -138,20 +138,31 @@ AND p.activo = 1
 
 
 
-
 const getFechaFiltro = (req) => {
-  const mes = req.query.mes; // formato: 2026-04
+  let mes = req.query.mes;
+
+  // 🔥 VALIDACIÓN REAL
+  if (!mes || mes === "undefined" || mes === "null") {
+    mes = null;
+  }
 
   let inicio, fin;
 
   if (mes) {
+    const date = new Date(`${mes}-01`);
+
+    // 🔥 VALIDAR FECHA
+    if (isNaN(date.getTime())) {
+      throw new Error("Mes inválido");
+    }
+
     inicio = `${mes}-01`;
 
-    const date = new Date(mes + "-01");
     date.setMonth(date.getMonth() + 1);
-    date.setDate(0); // último día del mes
+    date.setDate(0);
 
     fin = date.toISOString().split("T")[0];
+
   } else {
     const hoy = new Date();
 
@@ -805,10 +816,25 @@ exports.getEntradasSalidasMes = async (req, res) => {
     res.status(500).json({ error: "Error entradas/salidas" });
   }
 };
+
+
 exports.getValorInventario = async (req, res) => {
   try {
 
-    const { inicio, fin } = getFechaFiltro(req);
+    let inicio, fin;
+
+    try {
+      const fechas = getFechaFiltro(req);
+      inicio = fechas.inicio;
+      fin = fechas.fin;
+    } catch (e) {
+      console.error("Error fecha:", e.message);
+
+      return res.status(400).json({
+        error: "Mes inválido",
+        detalle: e.message
+      });
+    }
 
     const [rows] = await pool.query(`
       WITH ultimos AS (
@@ -853,10 +879,13 @@ exports.getValorInventario = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR VALOR INVENTARIO:", err);
     res.status(500).json({ error: "Error valor inventario" });
   }
 };
+
+
+
 exports.getStockInicial = async (req, res) => {
   try {
 
