@@ -738,20 +738,25 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
     res.status(500).json({error:"Error heatmap almacenes"});
   }
 }; // ✅ ← ESTE ES EL IMPORTANTE
-
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
-    let { inicio, fin } = req.query;
+    let inicio, fin;
 
-    if (!inicio || !fin) {
+    // =========================
+    // 1. VALIDACIÓN SEGURA FECHA
+    // =========================
+    try {
+      ({ inicio, fin } = getFechaFiltro(req));
+    } catch (e) {
       return res.status(400).json({
-        error: "Faltan parámetros inicio/fin"
+        error: "Parámetro mes inválido",
+        detalle: e.message
       });
     }
 
     // =========================
-    // 1. ESTADO ANTERIOR
+    // 2. ESTADO ANTERIOR
     // =========================
     const [previos] = await pool.query(`
       SELECT 
@@ -770,6 +775,7 @@ exports.getEvolucionInventario = async (req, res) => {
     let totalGlobal = 0;
 
     for (const mov of previos) {
+
       const cantidad = Number(mov.cantidad || 0);
       const precio = Number(mov.precio || 0);
 
@@ -781,7 +787,7 @@ exports.getEvolucionInventario = async (req, res) => {
     }
 
     // =========================
-    // 2. MOVIMIENTOS DEL PERIODO
+    // 3. MOVIMIENTOS DEL PERIODO
     // =========================
     const [rows] = await pool.query(`
       SELECT 
@@ -794,15 +800,14 @@ exports.getEvolucionInventario = async (req, res) => {
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND fecha_validacion_logistica >= ?
-        AND fecha_validacion_logistica < ?
+        AND fecha_validacion_logistica BETWEEN ? AND ?
       ORDER BY fecha_validacion_logistica ASC
     `, [inicio, fin]);
 
     const resultado = [];
 
     // =========================
-    // 3. EVOLUCIÓN
+    // 4. EVOLUCIÓN
     // =========================
     for (const mov of rows) {
 
@@ -824,45 +829,45 @@ exports.getEvolucionInventario = async (req, res) => {
       });
     }
 
-    res.json(resultado);
+    // =========================
+    // 5. RESPUESTA
+    // =========================
+    return res.json(resultado);
 
   } catch (err) {
     console.error("🔥 ERROR EVOLUCIÓN INVENTARIO:", err);
-    res.status(500).json({
+    return res.status(500).json({
       error: "Error evolución inventario",
       detalle: err.sqlMessage || err.message
     });
   }
 };
+
+
 // =====================================================
 // ENTRADAS Y SALIDAS
 // =====================================================
 exports.getEntradasSalidasMes = async (req, res) => {
   try {
 
-    const { inicio, fin } = req.query;
-
-    if (!inicio || !fin) {
-      return res.status(400).json({
-        error: "Faltan parámetros inicio/fin"
-      });
-    }
+    const { inicio, fin } = getFechaFiltro(req);
 
     const [[row]] = await pool.query(`
       SELECT
-        COUNT(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN 1 END) AS inicializaciones,
-        COUNT(CASE WHEN tipo_movimiento = 'entrada' THEN 1 END) AS entradas,
-        COUNT(CASE WHEN tipo_movimiento = 'salida' THEN 1 END) AS salidas,
+        COUNT(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN 1 END) inicializaciones,
 
-        SUM(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN cantidad ELSE 0 END) AS cant_inicial,
-        SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE 0 END) AS cant_entradas,
-        SUM(CASE WHEN tipo_movimiento = 'salida' THEN cantidad ELSE 0 END) AS cant_salidas
+        COUNT(CASE WHEN tipo_movimiento = 'entrada' THEN 1 END) entradas,
+        COUNT(CASE WHEN tipo_movimiento = 'salida' THEN 1 END) salidas,
+
+        SUM(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN cantidad ELSE 0 END) cant_inicial,
+        SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE 0 END) cant_entradas,
+        SUM(CASE WHEN tipo_movimiento = 'salida' THEN cantidad ELSE 0 END) cant_salidas
 
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
         AND fecha_validacion_logistica >= ?
-        AND fecha_validacion_logistica < ?
+        AND fecha_validacion_logistica < DATE_ADD(?, INTERVAL 1 DAY)
     `, [inicio, fin]);
 
     res.json(row);
@@ -880,13 +885,23 @@ exports.getEntradasSalidasMes = async (req, res) => {
 exports.getValorInventario = async (req, res) => {
   try {
 
-    const { inicio, fin } = req.query;
+    let inicio, fin;
 
-    if (!inicio || !fin) {
-      return res.status(400).json({ error: "Faltan fechas" });
+    try {
+      const fechas = getFechaFiltro(req);
+      inicio = fechas.inicio;
+      fin = fechas.fin;
+    } catch (e) {
+      return res.status(400).json({
+        error: "Mes inválido",
+        detalle: e.message
+      });
     }
 
-    const [rowsFinal] = await pool.query(`
+    // =========================
+    // VALOR FINAL
+    // =========================
+    const [rows] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
         SELECT 
@@ -894,21 +909,31 @@ exports.getValorInventario = async (req, res) => {
           mi.almacen_id,
           mi.producto_id,
           mi.stock_resultante AS stock,
-          mi.costo_promedio_resultante AS costo,
-          ROW_NUMBER() OVER (
-            PARTITION BY mi.empresa_id, mi.almacen_id, mi.producto_id
-            ORDER BY mi.fecha_validacion_logistica DESC
-          ) rn
+          mi.costo_promedio_resultante AS costo
         FROM movimientos_inventario mi
-        WHERE 
-          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica <= ?
+        INNER JOIN (
+          SELECT 
+            empresa_id,
+            almacen_id,
+            producto_id,
+            MAX(fecha_validacion_logistica) AS max_fecha
+          FROM movimientos_inventario
+          WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+            AND fecha_validacion_logistica BETWEEN ? AND ?
+          GROUP BY empresa_id, almacen_id, producto_id
+        ) ult
+        ON mi.empresa_id = ult.empresa_id
+        AND mi.almacen_id = ult.almacen_id
+        AND mi.producto_id = ult.producto_id
+        AND mi.fecha_validacion_logistica = ult.max_fecha
       ) t
-      WHERE t.rn = 1
-    `, [fin]);
+    `, [inicio, fin]);
 
-    const valorFinal = rowsFinal[0]?.total || 0;
+    const valorFinal = rows[0]?.total || 0;
 
+    // =========================
+    // VALOR INICIAL
+    // =========================
     const [rowsIni] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
@@ -939,7 +964,7 @@ exports.getValorInventario = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR VALOR INVENTARIO:", err);
     res.status(500).json({
       error: "Error valor inventario",
       detalle: err.sqlMessage || err.message
