@@ -740,19 +740,11 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 }; // ✅ ← ESTE ES EL IMPORTANTE
 
 
+
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
-    let inicio, fin;
-
-    try {
-      ({ inicio, fin } = getFechaFiltro(req));
-    } catch (e) {
-      return res.status(400).json({
-        error: "Parámetro mes inválido",
-        detalle: e.message
-      });
-    }
+    const { inicio, fin } = getFechaFiltro(req);
 
     // 🔥 1. CARGAR ESTADO INICIAL
     const [previos] = await pool.query(`
