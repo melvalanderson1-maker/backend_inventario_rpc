@@ -699,29 +699,37 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 
 
 
-
-let totalGlobal = 0;
-
-for (const mov of rows) {
-  const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
-
-  const nuevo = Number(mov.stock) * Number(mov.costo_promedio);
-  const anterior = estado[key] || 0;
-
-  estado[key] = nuevo;
-
-  totalGlobal = totalGlobal - anterior + nuevo;
-
-  resultado.push({
-    fecha: mov.fecha_validacion_logistica,
-    total: totalGlobal
-  });
-}
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
     const { inicio, fin } = getFechaFiltro(req);
 
+    // 🔥 1. CARGAR ESTADO INICIAL
+    const [previos] = await pool.query(`
+      SELECT 
+        empresa_id,
+        almacen_id,
+        producto_id,
+        stock,
+        costo_promedio
+      FROM movimientos_inventario
+      WHERE 
+        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND fecha_validacion_logistica < ?
+    `, [inicio]);
+
+    const estado = {};
+    let totalGlobal = 0;
+
+    for (const mov of previos) {
+      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
+      const val = Number(mov.stock) * Number(mov.costo_promedio);
+
+      estado[key] = val;
+      totalGlobal += val;
+    }
+
+    // 🔥 2. MOVIMIENTOS DEL PERIODO
     const [rows] = await pool.query(`
       SELECT 
         empresa_id,
@@ -733,16 +741,13 @@ exports.getEvolucionInventario = async (req, res) => {
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND fecha_validacion_logistica IS NOT NULL
         AND fecha_validacion_logistica BETWEEN ? AND ?
       ORDER BY fecha_validacion_logistica ASC
     `, [inicio, fin]);
 
-    const estado = {};
     const resultado = [];
 
-    let totalGlobal = 0;
-
+    // 🔥 3. EVOLUCIÓN
     for (const mov of rows) {
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
 
@@ -766,6 +771,9 @@ exports.getEvolucionInventario = async (req, res) => {
     res.status(500).json({ error: "Error evolución inventario" });
   }
 };
+
+
+
 exports.getEntradasSalidasMes = async (req, res) => {
   try {
 
