@@ -839,19 +839,23 @@ exports.getValorInventario = async (req, res) => {
     }
 
     const [rows] = await pool.query(`
-      WITH ultimos AS (
-        SELECT *,
-          ROW_NUMBER() OVER (
-            PARTITION BY empresa_id, almacen_id, producto_id
-            ORDER BY fecha_validacion_logistica DESC
-          ) rn
+      SELECT SUM(mi.stock * mi.costo_promedio) as total
+      FROM movimientos_inventario mi
+      INNER JOIN (
+        SELECT 
+          empresa_id,
+          almacen_id,
+          producto_id,
+          MAX(fecha_validacion_logistica) as max_fecha
         FROM movimientos_inventario
-        WHERE 
-          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
           AND fecha_validacion_logistica <= ?
-      )
-      SELECT SUM(stock * costo_promedio) as total
-      FROM ultimos WHERE rn = 1
+        GROUP BY empresa_id, almacen_id, producto_id
+      ) ult
+      ON mi.empresa_id = ult.empresa_id
+      AND mi.almacen_id = ult.almacen_id
+      AND mi.producto_id = ult.producto_id
+      AND mi.fecha_validacion_logistica = ult.max_fecha
     `, [fin]);
 
     const valorFinal = rows[0]?.total || 0;
