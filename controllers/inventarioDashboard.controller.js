@@ -740,20 +740,33 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 }; // ✅ ← ESTE ES EL IMPORTANTE
 
 
-
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
-    const { inicio, fin } = getFechaFiltro(req);
+    let inicio, fin;
 
-    // 🔥 1. CARGAR ESTADO INICIAL
+    // =========================
+    // 1. VALIDACIÓN SEGURA FECHA
+    // =========================
+    try {
+      ({ inicio, fin } = getFechaFiltro(req));
+    } catch (e) {
+      return res.status(400).json({
+        error: "Parámetro mes inválido",
+        detalle: e.message
+      });
+    }
+
+    // =========================
+    // 2. ESTADO ANTERIOR (CORREGIDO)
+    // =========================
     const [previos] = await pool.query(`
       SELECT 
         empresa_id,
         almacen_id,
         producto_id,
-        stock,
-        costo_promedio
+        cantidad,
+        precio
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
@@ -764,22 +777,28 @@ exports.getEvolucionInventario = async (req, res) => {
     let totalGlobal = 0;
 
     for (const mov of previos) {
+
+      const cantidad = Number(mov.cantidad || 0);
+      const precio = Number(mov.precio || 0);
+
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
-      const val = Number(mov.stock) * Number(mov.costo_promedio);
+      const val = cantidad * precio;
 
       estado[key] = val;
       totalGlobal += val;
     }
 
-    // 🔥 2. MOVIMIENTOS DEL PERIODO
+    // =========================
+    // 3. MOVIMIENTOS DEL PERIODO
+    // =========================
     const [rows] = await pool.query(`
       SELECT 
         empresa_id,
         almacen_id,
         producto_id,
         fecha_validacion_logistica,
-        stock,
-        costo_promedio
+        cantidad,
+        precio
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
@@ -789,11 +808,17 @@ exports.getEvolucionInventario = async (req, res) => {
 
     const resultado = [];
 
-    // 🔥 3. EVOLUCIÓN
+    // =========================
+    // 4. EVOLUCIÓN
+    // =========================
     for (const mov of rows) {
+
+      const cantidad = Number(mov.cantidad || 0);
+      const precio = Number(mov.precio || 0);
+
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
 
-      const nuevo = Number(mov.stock) * Number(mov.costo_promedio);
+      const nuevo = cantidad * precio;
       const anterior = estado[key] || 0;
 
       estado[key] = nuevo;
@@ -806,11 +831,19 @@ exports.getEvolucionInventario = async (req, res) => {
       });
     }
 
+    // =========================
+    // 5. RESPUESTA
+    // =========================
     res.json(resultado);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error evolución inventario" });
+    console.error("🔥 ERROR EVOLUCIÓN INVENTARIO:", err);
+    console.error(err.sqlMessage || err.message);
+
+    res.status(500).json({
+      error: "Error evolución inventario",
+      detalle: err.sqlMessage || err.message
+    });
   }
 };
 
