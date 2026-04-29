@@ -185,19 +185,22 @@ FILTRO DINAMICO
 
 function buildFilteredQuery(req){
 
-const { categoria } = req.query;
+  const { categoria } = req.query;
 
-let query = `SELECT * FROM (${BASE_QUERY}) t`;
+  let query = `SELECT * FROM (${BASE_QUERY}) t`;
 
-if(categoria){
-query += ` WHERE t.categoria_id = ${Number(categoria)}`;
+  const conditions = [];
+
+  if(categoria){
+    conditions.push(`t.categoria_id = ${Number(categoria)}`);
+  }
+
+  if(conditions.length > 0){
+    query += ` WHERE ` + conditions.join(" AND ");
+  }
+
+  return query;
 }
-
-return query;
-
-
-}
-
 
 function getPagination(req) {
   const page = Number(req.query.page || 0);
@@ -470,45 +473,64 @@ res.status(500).json({error:"Error rotacion"});
 /* =====================================================
 INVENTARIO
 ===================================================== */
-
 exports.getInventario = async (req, res) => {
   try {
 
     const { size, offset } = getPagination(req);
     const { producto, tipo } = req.query;
 
-    let query = `
+    const baseQuery = buildFilteredQuery(req);
+
+    // 🔥 CONDICIONES SEGURAS
+    const conditions = [];
+
+    if (producto) {
+      conditions.push(`t.codigo_producto = ?`);
+    }
+
+    let finalQuery = `
       SELECT *
-      FROM (${buildFilteredQuery(req)}) t
+      FROM (${baseQuery}) t
     `;
 
-    // 🔥 FILTRO CLAVE
-    if (producto) {
-      query += ` WHERE t.codigo_producto = '${producto}'`;
+    if (conditions.length > 0) {
+      finalQuery += ` WHERE ` + conditions.join(" AND ");
     }
 
-    // 🔥 ORDEN DINÁMICO SEGÚN GRÁFICO
+    // 🔥 ORDEN DINÁMICO
     if (tipo === "stock") {
-      query += ` ORDER BY t.stock_total_producto DESC`;
+      finalQuery += ` ORDER BY t.stock_total_producto DESC`;
     } else {
-      query += ` ORDER BY t.valor_total_producto DESC`;
+      finalQuery += ` ORDER BY t.valor_total_producto DESC`;
     }
 
-    query += ` LIMIT ? OFFSET ?`;
+    finalQuery += ` LIMIT ? OFFSET ?`;
 
-    const [rows] = await pool.query(query, [size, offset]);
+    // 🔥 PARAMETROS DINÁMICOS
+    const params = [];
 
-    // 🔥 COUNT TAMBIÉN FILTRADO
+    if (producto) {
+      params.push(producto);
+    }
+
+    params.push(size, offset);
+
+    const [rows] = await pool.query(finalQuery, params);
+
+    // 🔥 COUNT (MISMA CONDICIÓN)
     let countQuery = `
       SELECT COUNT(*) total
-      FROM (${buildFilteredQuery(req)}) t
+      FROM (${baseQuery}) t
     `;
 
+    const countParams = [];
+
     if (producto) {
-      countQuery += ` WHERE t.codigo_producto = '${producto}'`;
+      countQuery += ` WHERE t.codigo_producto = ?`;
+      countParams.push(producto);
     }
 
-    const [countRows] = await pool.query(countQuery);
+    const [countRows] = await pool.query(countQuery, countParams);
 
     const total = countRows[0].total;
 
@@ -523,7 +545,6 @@ exports.getInventario = async (req, res) => {
     res.status(500).json({ error: "Error inventario" });
   }
 };
-
 /* =====================================================
 PRODUCTOS POR STOCK
 ===================================================== */
