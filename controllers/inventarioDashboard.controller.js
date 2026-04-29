@@ -137,24 +137,25 @@ AND p.activo = 1
 
 
 
-
 const getFechaFiltro = (req) => {
+
   let mes = req.query.mes;
 
-  // 🔥 VALIDACIÓN REAL
-  if (!mes || mes === "undefined" || mes === "null") {
+  // 🔥 LIMPIEZA TOTAL
+  if (!mes || mes === "undefined" || mes === "null" || mes === "") {
     mes = null;
   }
 
   let inicio, fin;
 
   if (mes) {
-    const date = new Date(`${mes}-01`);
 
-    // 🔥 VALIDAR FECHA
-    if (isNaN(date.getTime())) {
-      throw new Error("Mes inválido");
+    // 🔥 VALIDAR FORMATO YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(mes)) {
+      throw new Error("Formato de mes inválido (YYYY-MM)");
     }
+
+    const date = new Date(`${mes}-01`);
 
     inicio = `${mes}-01`;
 
@@ -164,6 +165,7 @@ const getFechaFiltro = (req) => {
     fin = date.toISOString().split("T")[0];
 
   } else {
+
     const hoy = new Date();
 
     inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
