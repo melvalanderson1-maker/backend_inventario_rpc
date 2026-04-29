@@ -881,14 +881,15 @@ exports.getEntradasSalidasMes = async (req, res) => {
   }
 };
 
-
 exports.getValorInventario = async (req, res) => {
   try {
 
     let inicio, fin;
 
     try {
-      ({ inicio, fin } = getFechaFiltro(req));
+      const fechas = getFechaFiltro(req);
+      inicio = fechas.inicio;
+      fin = fechas.fin;
     } catch (e) {
       return res.status(400).json({
         error: "Mes inválido",
@@ -896,25 +897,10 @@ exports.getValorInventario = async (req, res) => {
       });
     }
 
-    // =========================
-    // 🔥 MES ANTERIOR (CORRECTO)
-    // =========================
-    const inicioDate = new Date(inicio);
-    const finDate = new Date(fin);
-
-    const inicioAnteriorDate = new Date(inicioDate);
-    inicioAnteriorDate.setMonth(inicioAnteriorDate.getMonth() - 1);
-
-    const finAnteriorDate = new Date(finDate);
-    finAnteriorDate.setMonth(finAnteriorDate.getMonth() - 1);
-
-    const inicioAnterior = inicioAnteriorDate.toISOString().split("T")[0];
-    const finAnterior = finAnteriorDate.toISOString().split("T")[0];
-
-    // =========================
-    // 🔥 VALOR FINAL (MES ACTUAL)
-    // =========================
-    const [rowsActual] = await pool.query(`
+    // =====================================================
+    // 🔥 VALOR FINAL (último estado dentro del mes)
+    // =====================================================
+    const [rowsFinal] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
         SELECT 
@@ -930,15 +916,17 @@ exports.getValorInventario = async (req, res) => {
         FROM movimientos_inventario mi
         WHERE 
           mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
+          AND mi.fecha_validacion_logistica <= ?
       ) t
       WHERE t.rn = 1
-    `, [inicio, fin]);
+    `, [fin]);
 
-    // =========================
-    // 🔥 VALOR ANTERIOR
-    // =========================
-    const [rowsAnterior] = await pool.query(`
+    const valorFinal = rowsFinal[0]?.total || 0;
+
+    // =====================================================
+    // 🔥 VALOR INICIAL (estado justo antes del mes)
+    // =====================================================
+    const [rowsIni] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
         SELECT 
@@ -954,13 +942,12 @@ exports.getValorInventario = async (req, res) => {
         FROM movimientos_inventario mi
         WHERE 
           mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
+          AND mi.fecha_validacion_logistica < ?
       ) t
       WHERE t.rn = 1
-    `, [inicioAnterior, finAnterior]);
+    `, [inicio]);
 
-    const valorFinal = rowsActual[0]?.total || 0;
-    const valorInicial = rowsAnterior[0]?.total || 0;
+    const valorInicial = rowsIni[0]?.total || 0;
 
     return res.json({
       valor_inicial: valorInicial,
@@ -970,13 +957,12 @@ exports.getValorInventario = async (req, res) => {
 
   } catch (err) {
     console.error("ERROR VALOR INVENTARIO:", err);
-    return res.status(500).json({
+    res.status(500).json({
       error: "Error valor inventario",
       detalle: err.sqlMessage || err.message
     });
   }
 };
-
 
 exports.getStockInicial = async (req, res) => {
   try {
