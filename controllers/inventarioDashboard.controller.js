@@ -738,48 +738,26 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
     res.status(500).json({error:"Error heatmap almacenes"});
   }
 }; // ✅ ← ESTE ES EL IMPORTANTE
-
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
     let inicio, fin;
 
-    // =====================================================
-    // 1. OBTENER FECHAS (ROBUSTO)
-    // =====================================================
+    // =========================
+    // 1. VALIDACIÓN SEGURA FECHA
+    // =========================
     try {
-
-      // caso 1: vienen inicio y fin directo
-      if (req.query.inicio && req.query.fin) {
-        inicio = req.query.inicio;
-        fin = req.query.fin;
-      } 
-      // caso 2: viene mes
-      else if (req.query.mes) {
-        const fecha = new Date(req.query.mes + "-01");
-        const finDate = new Date(fecha);
-        finDate.setMonth(finDate.getMonth() + 1);
-
-        inicio = fecha.toISOString().slice(0, 10);
-        fin = finDate.toISOString().slice(0, 10);
-      } 
-      else {
-        return res.status(400).json({
-          error: "Faltan parámetros",
-          detalle: "Debes enviar inicio/fin o mes"
-        });
-      }
-
+      ({ inicio, fin } = getFechaFiltro(req));
     } catch (e) {
       return res.status(400).json({
-        error: "Error en rango de fechas",
+        error: "Parámetro mes inválido",
         detalle: e.message
       });
     }
 
-    // =====================================================
-    // 2. ESTADO ANTERIOR (ANTES DEL MES)
-    // =====================================================
+    // =========================
+    // 2. ESTADO ANTERIOR
+    // =========================
     const [previos] = await pool.query(`
       SELECT 
         empresa_id,
@@ -808,9 +786,9 @@ exports.getEvolucionInventario = async (req, res) => {
       totalGlobal += val;
     }
 
-    // =====================================================
+    // =========================
     // 3. MOVIMIENTOS DEL PERIODO
-    // =====================================================
+    // =========================
     const [rows] = await pool.query(`
       SELECT 
         empresa_id,
@@ -828,9 +806,9 @@ exports.getEvolucionInventario = async (req, res) => {
 
     const resultado = [];
 
-    // =====================================================
+    // =========================
     // 4. EVOLUCIÓN
-    // =====================================================
+    // =========================
     for (const mov of rows) {
 
       const cantidad = Number(mov.cantidad || 0);
@@ -851,18 +829,13 @@ exports.getEvolucionInventario = async (req, res) => {
       });
     }
 
-    // =====================================================
+    // =========================
     // 5. RESPUESTA
-    // =====================================================
-    return res.json({
-      inicio,
-      fin,
-      data: resultado
-    });
+    // =========================
+    return res.json(resultado);
 
   } catch (err) {
     console.error("🔥 ERROR EVOLUCIÓN INVENTARIO:", err);
-
     return res.status(500).json({
       error: "Error evolución inventario",
       detalle: err.sqlMessage || err.message
@@ -871,7 +844,9 @@ exports.getEvolucionInventario = async (req, res) => {
 };
 
 
-
+// =====================================================
+// ENTRADAS Y SALIDAS
+// =====================================================
 exports.getEntradasSalidasMes = async (req, res) => {
   try {
 
@@ -885,7 +860,6 @@ exports.getEntradasSalidasMes = async (req, res) => {
         COUNT(CASE WHEN tipo_movimiento = 'salida' THEN 1 END) salidas,
 
         SUM(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN cantidad ELSE 0 END) cant_inicial,
-
         SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE 0 END) cant_entradas,
         SUM(CASE WHEN tipo_movimiento = 'salida' THEN cantidad ELSE 0 END) cant_salidas
 
@@ -904,6 +878,10 @@ exports.getEntradasSalidasMes = async (req, res) => {
   }
 };
 
+
+// =====================================================
+// VALOR INVENTARIO
+// =====================================================
 exports.getValorInventario = async (req, res) => {
   try {
 
@@ -921,7 +899,7 @@ exports.getValorInventario = async (req, res) => {
     }
 
     // =========================
-    // VALOR FINAL (último estado)
+    // VALOR FINAL
     // =========================
     const [rows] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
@@ -949,7 +927,7 @@ exports.getValorInventario = async (req, res) => {
         AND mi.producto_id = ult.producto_id
         AND mi.fecha_validacion_logistica = ult.max_fecha
       ) t
-    `, [fin]);
+    `, [inicio, fin]);
 
     const valorFinal = rows[0]?.total || 0;
 
@@ -995,6 +973,9 @@ exports.getValorInventario = async (req, res) => {
 };
 
 
+// =====================================================
+// STOCK INICIAL
+// =====================================================
 exports.getStockInicial = async (req, res) => {
   try {
 
@@ -1028,7 +1009,6 @@ exports.getStockInicial = async (req, res) => {
     res.status(500).json({ error: "Error stock inicial" });
   }
 };
-
 
 exports.getSinMovimiento = async (req, res) => {
   try {
