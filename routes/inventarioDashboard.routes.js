@@ -43,6 +43,8 @@ router.get("/heatmap-almacenes",controller.getHeatmapAlmacenes);
 
 
 
+router.get("/evolucion-inventario", controller.getEvolucionInventario);
+
 router.get("/entradas-salidas", controller.getEntradasSalidasMes);
 
 router.get("/stock-inicial", controller.getStockInicial);

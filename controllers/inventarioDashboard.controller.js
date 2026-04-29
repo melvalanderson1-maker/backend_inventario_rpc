@@ -700,72 +700,166 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 
 
 
+let totalGlobal = 0;
 
+for (const mov of rows) {
+  const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
 
-exports.getEntradasSalidasMes = async (req, res) => {
+  const nuevo = Number(mov.stock) * Number(mov.costo_promedio);
+  const anterior = estado[key] || 0;
+
+  estado[key] = nuevo;
+
+  totalGlobal = totalGlobal - anterior + nuevo;
+
+  resultado.push({
+    fecha: mov.fecha_validacion_logistica,
+    total: totalGlobal
+  });
+}
+exports.getEvolucionInventario = async (req, res) => {
   try {
 
     const { inicio, fin } = getFechaFiltro(req);
 
     const [rows] = await pool.query(`
-      SELECT
-        p.id producto_id,
-        p.codigo,
-        p.descripcion producto,
-
-        img.storage_provider,
-        img.storage_key,
-
-        COUNT(CASE 
-          WHEN m.tipo_movimiento = 'entrada' 
-          THEN 1 END) cantidad_entradas,
-
-        COUNT(CASE 
-          WHEN m.tipo_movimiento = 'salida' 
-          THEN 1 END) cantidad_salidas,
-
-        SUM(CASE 
-          WHEN m.tipo_movimiento = 'entrada'
-          THEN m.cantidad ELSE 0 END) total_entradas,
-
-        SUM(CASE 
-          WHEN m.tipo_movimiento = 'salida'
-          THEN m.cantidad ELSE 0 END) total_salidas
-
-      FROM movimientos_inventario m
-      JOIN productos p ON p.id = m.producto_id
-
-      ${joinImagenProducto()}
-
+      SELECT 
+        empresa_id,
+        almacen_id,
+        producto_id,
+        fecha_validacion_logistica,
+        stock,
+        costo_promedio
+      FROM movimientos_inventario
       WHERE 
-        m.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND m.fecha_validacion_logistica IS NOT NULL
-        AND DATE(m.fecha_validacion_logistica) BETWEEN ? AND ?
-
-      GROUP BY p.id, p.codigo, p.descripcion, img.storage_provider, img.storage_key
-
-      ORDER BY total_entradas DESC
+        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND fecha_validacion_logistica IS NOT NULL
+        AND fecha_validacion_logistica BETWEEN ? AND ?
+      ORDER BY fecha_validacion_logistica ASC
     `, [inicio, fin]);
 
-    res.json(rows);
+    const estado = {};
+    const resultado = [];
+
+    let totalGlobal = 0;
+
+    for (const mov of rows) {
+      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
+
+      const nuevo = Number(mov.stock) * Number(mov.costo_promedio);
+      const anterior = estado[key] || 0;
+
+      estado[key] = nuevo;
+
+      totalGlobal = totalGlobal - anterior + nuevo;
+
+      resultado.push({
+        fecha: mov.fecha_validacion_logistica,
+        total: totalGlobal
+      });
+    }
+
+    res.json(resultado);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error evolución inventario" });
+  }
+};
+exports.getEntradasSalidasMes = async (req, res) => {
+  try {
+
+    const { inicio, fin } = getFechaFiltro(req);
+
+    const [[row]] = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN 1 END) inicializaciones,
+
+        COUNT(CASE WHEN tipo_movimiento = 'entrada' THEN 1 END) entradas,
+        COUNT(CASE WHEN tipo_movimiento = 'salida' THEN 1 END) salidas,
+
+        SUM(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN cantidad ELSE 0 END) cant_inicial,
+
+        SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE 0 END) cant_entradas,
+        SUM(CASE WHEN tipo_movimiento = 'salida' THEN cantidad ELSE 0 END) cant_salidas
+
+      FROM movimientos_inventario
+      WHERE 
+        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND fecha_validacion_logistica >= ?
+        AND fecha_validacion_logistica < DATE_ADD(?, INTERVAL 1 DAY)
+    `, [inicio, fin]);
+
+    res.json(row);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error entradas/salidas" });
   }
 };
+exports.getValorInventario = async (req, res) => {
+  try {
 
+    const { inicio, fin } = getFechaFiltro(req);
 
+    const [rows] = await pool.query(`
+      WITH ultimos AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY empresa_id, almacen_id, producto_id
+            ORDER BY fecha_validacion_logistica DESC
+          ) rn
+        FROM movimientos_inventario
+        WHERE 
+          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND fecha_validacion_logistica <= ?
+      )
+      SELECT SUM(stock * costo_promedio) as total
+      FROM ultimos WHERE rn = 1
+    `, [fin]);
+
+    const valorFinal = rows[0]?.total || 0;
+
+    const [rowsIni] = await pool.query(`
+      WITH ultimos AS (
+        SELECT *,
+          ROW_NUMBER() OVER (
+            PARTITION BY empresa_id, almacen_id, producto_id
+            ORDER BY fecha_validacion_logistica DESC
+          ) rn
+        FROM movimientos_inventario
+        WHERE 
+          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND fecha_validacion_logistica < ?
+      )
+      SELECT SUM(stock * costo_promedio) as total
+      FROM ultimos WHERE rn = 1
+    `, [inicio]);
+
+    const valorInicial = rowsIni[0]?.total || 0;
+
+    res.json({
+      valor_inicial: valorInicial,
+      valor_final: valorFinal,
+      variacion: valorFinal - valorInicial
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error valor inventario" });
+  }
+};
 exports.getStockInicial = async (req, res) => {
   try {
 
     const { inicio } = getFechaFiltro(req);
 
     const [rows] = await pool.query(`
-      SELECT 
-        SUM(stock) AS stock_inicial_total
+      SELECT SUM(stock) AS total
       FROM (
         SELECT 
+          empresa_id,
+          almacen_id,
           producto_id,
           SUM(
             CASE 
@@ -776,15 +870,12 @@ exports.getStockInicial = async (req, res) => {
         FROM movimientos_inventario
         WHERE 
           estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND fecha_validacion_logistica IS NOT NULL
           AND fecha_validacion_logistica < ?
-        GROUP BY producto_id
+        GROUP BY empresa_id, almacen_id, producto_id
       ) t
     `, [inicio]);
 
-    res.json({
-      stock_inicial: rows[0]?.stock_inicial_total || 0
-    });
+    res.json({ stock_inicial: rows[0]?.total || 0 });
 
   } catch (err) {
     console.error(err);
