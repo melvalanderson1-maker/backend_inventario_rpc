@@ -743,21 +743,42 @@ exports.getEvolucionInventario = async (req, res) => {
 
     let inicio, fin;
 
-    // =========================
-    // 1. VALIDACIÓN SEGURA FECHA
-    // =========================
+    // =====================================================
+    // 1. OBTENER FECHAS (ROBUSTO)
+    // =====================================================
     try {
-      ({ inicio, fin } = getFechaFiltro(req));
+
+      // caso 1: vienen inicio y fin directo
+      if (req.query.inicio && req.query.fin) {
+        inicio = req.query.inicio;
+        fin = req.query.fin;
+      } 
+      // caso 2: viene mes
+      else if (req.query.mes) {
+        const fecha = new Date(req.query.mes + "-01");
+        const finDate = new Date(fecha);
+        finDate.setMonth(finDate.getMonth() + 1);
+
+        inicio = fecha.toISOString().slice(0, 10);
+        fin = finDate.toISOString().slice(0, 10);
+      } 
+      else {
+        return res.status(400).json({
+          error: "Faltan parámetros",
+          detalle: "Debes enviar inicio/fin o mes"
+        });
+      }
+
     } catch (e) {
       return res.status(400).json({
-        error: "Parámetro mes inválido",
+        error: "Error en rango de fechas",
         detalle: e.message
       });
     }
 
-    // =========================
-    // 2. ESTADO ANTERIOR
-    // =========================
+    // =====================================================
+    // 2. ESTADO ANTERIOR (ANTES DEL MES)
+    // =====================================================
     const [previos] = await pool.query(`
       SELECT 
         empresa_id,
@@ -786,9 +807,9 @@ exports.getEvolucionInventario = async (req, res) => {
       totalGlobal += val;
     }
 
-    // =========================
+    // =====================================================
     // 3. MOVIMIENTOS DEL PERIODO
-    // =========================
+    // =====================================================
     const [rows] = await pool.query(`
       SELECT 
         empresa_id,
@@ -806,9 +827,9 @@ exports.getEvolucionInventario = async (req, res) => {
 
     const resultado = [];
 
-    // =========================
+    // =====================================================
     // 4. EVOLUCIÓN
-    // =========================
+    // =====================================================
     for (const mov of rows) {
 
       const cantidad = Number(mov.cantidad || 0);
@@ -829,20 +850,24 @@ exports.getEvolucionInventario = async (req, res) => {
       });
     }
 
-    // =========================
+    // =====================================================
     // 5. RESPUESTA
-    // =========================
-    return res.json(resultado);
+    // =====================================================
+    return res.json({
+      inicio,
+      fin,
+      data: resultado
+    });
 
   } catch (err) {
     console.error("🔥 ERROR EVOLUCIÓN INVENTARIO:", err);
+
     return res.status(500).json({
       error: "Error evolución inventario",
       detalle: err.sqlMessage || err.message
     });
   }
 };
-
 
 // =====================================================
 // ENTRADAS Y SALIDAS
