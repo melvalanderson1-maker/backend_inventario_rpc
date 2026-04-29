@@ -135,34 +135,42 @@ AND p.eliminado = 0
 AND p.activo = 1
 `;
 
-
-
 const getFechaFiltro = (req) => {
-
   let mes = req.query.mes;
 
-  // 🔥 LIMPIEZA TOTAL
-  if (!mes || mes === "undefined" || mes === "null" || mes === "") {
+  // limpiar basura real
+  if (!mes || typeof mes !== "string") {
     mes = null;
+  } else {
+    mes = mes.trim();
+    if (mes === "undefined" || mes === "null" || mes === "") {
+      mes = null;
+    }
   }
 
   let inicio, fin;
 
   if (mes) {
 
-    // 🔥 VALIDAR FORMATO YYYY-MM
     if (!/^\d{4}-\d{2}$/.test(mes)) {
-      throw new Error("Formato de mes inválido (YYYY-MM)");
+      throw new Error("Formato inválido (YYYY-MM)");
     }
 
-    const date = new Date(`${mes}-01`);
+    const [year, month] = mes.split("-").map(Number);
+
+    if (
+      Number.isNaN(year) ||
+      Number.isNaN(month) ||
+      month < 1 ||
+      month > 12
+    ) {
+      throw new Error("Mes inválido");
+    }
 
     inicio = `${mes}-01`;
 
-    date.setMonth(date.getMonth() + 1);
-    date.setDate(0);
-
-    fin = date.toISOString().split("T")[0];
+    const lastDay = new Date(year, month, 0);
+    fin = lastDay.toISOString().split("T")[0];
 
   } else {
 
@@ -732,11 +740,19 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 }; // ✅ ← ESTE ES EL IMPORTANTE
 
 
-
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
-    const { inicio, fin } = getFechaFiltro(req);
+    let inicio, fin;
+
+    try {
+      ({ inicio, fin } = getFechaFiltro(req));
+    } catch (e) {
+      return res.status(400).json({
+        error: "Parámetro mes inválido",
+        detalle: e.message
+      });
+    }
 
     // 🔥 1. CARGAR ESTADO INICIAL
     const [previos] = await pool.query(`
