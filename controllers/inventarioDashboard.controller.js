@@ -758,7 +758,7 @@ exports.getEvolucionInventario = async (req, res) => {
     }
 
     // =====================================================
-    // 2. ESTADO INICIAL (snapshot antes del mes)
+    // 2. SNAPSHOT INICIAL (seguro, sin JOIN peligroso)
     // =====================================================
     const [previos] = await pool.query(`
       SELECT 
@@ -767,23 +767,18 @@ exports.getEvolucionInventario = async (req, res) => {
         producto_id,
         stock_resultante,
         costo_promedio_resultante
-      FROM movimientos_inventario mi
-      INNER JOIN (
-        SELECT 
-          empresa_id,
-          almacen_id,
-          producto_id,
-          MAX(fecha_validacion_logistica) AS max_fecha
-        FROM movimientos_inventario
-        WHERE 
-          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND fecha_validacion_logistica < ?
-        GROUP BY empresa_id, almacen_id, producto_id
-      ) ult
-      ON mi.empresa_id = ult.empresa_id
-      AND mi.almacen_id = ult.almacen_id
-      AND mi.producto_id = ult.producto_id
-      AND mi.fecha_validacion_logistica = ult.max_fecha
+      FROM movimientos_inventario
+      WHERE 
+        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND fecha_validacion_logistica = (
+          SELECT MAX(fecha_validacion_logistica)
+          FROM movimientos_inventario mi2
+          WHERE 
+            mi2.empresa_id = movimientos_inventario.empresa_id
+            AND mi2.almacen_id = movimientos_inventario.almacen_id
+            AND mi2.producto_id = movimientos_inventario.producto_id
+            AND mi2.fecha_validacion_logistica < ?
+        )
     `, [inicio]);
 
     const estado = {};
@@ -791,18 +786,19 @@ exports.getEvolucionInventario = async (req, res) => {
 
     for (const mov of previos) {
 
-      const stock = Number(mov.stock_resultante || 0);
-      const costo = Number(mov.costo_promedio_resultante || 0);
+      const stock = Number(mov.stock_resultante ?? 0);
+      const costo = Number(mov.costo_promedio_resultante ?? 0);
+
+      const valor = stock * costo;
 
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
-      const val = stock * costo;
 
-      estado[key] = val;
-      totalGlobal += val;
+      estado[key] = valor;
+      totalGlobal += valor;
     }
 
     // =====================================================
-    // 3. MOVIMIENTOS DEL PERIODO (para evolución)
+    // 3. MOVIMIENTOS DEL PERIODO (orden seguro)
     // =====================================================
     const [rows] = await pool.query(`
       SELECT 
@@ -816,31 +812,32 @@ exports.getEvolucionInventario = async (req, res) => {
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
         AND fecha_validacion_logistica BETWEEN ? AND ?
-      ORDER BY fecha_validacion_logistica ASC
+      ORDER BY fecha_validacion_logistica ASC, id ASC
     `, [inicio, fin]);
 
     const resultado = [];
 
     // =====================================================
-    // 4. EVOLUCIÓN REAL (snapshot incremental)
+    // 4. EVOLUCIÓN SEGURA
     // =====================================================
     for (const mov of rows) {
 
-      const stock = Number(mov.stock_resultante || 0);
-      const costo = Number(mov.costo_promedio_resultante || 0);
+      const stock = Number(mov.stock_resultante ?? 0);
+      const costo = Number(mov.costo_promedio_resultante ?? 0);
+
+      const valorNuevo = stock * costo;
 
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
 
-      const nuevo = stock * costo;
-      const anterior = estado[key] || 0;
+      const valorAnterior = estado[key] ?? 0;
 
-      estado[key] = nuevo;
+      estado[key] = valorNuevo;
 
-      totalGlobal = totalGlobal - anterior + nuevo;
+      totalGlobal = totalGlobal - valorAnterior + valorNuevo;
 
       resultado.push({
         fecha: mov.fecha_validacion_logistica,
-        total: totalGlobal
+        total: Number(totalGlobal.toFixed(2))
       });
     }
 
@@ -851,6 +848,7 @@ exports.getEvolucionInventario = async (req, res) => {
 
   } catch (err) {
     console.error("🔥 ERROR EVOLUCIÓN INVENTARIO:", err);
+
     return res.status(500).json({
       error: "Error evolución inventario",
       detalle: err.sqlMessage || err.message
