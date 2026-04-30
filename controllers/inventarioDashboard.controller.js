@@ -150,7 +150,7 @@ const getFechaFiltro = (req) => {
     inicio = `${mes}-01`;
 
     const lastDay = new Date(year, month, 0);
-    fin = lastDay.toISOString().split("T")[0];
+    fin = `${mes}-${String(lastDay.getDate()).padStart(2,'0')} 23:59:59`;
 
   } else {
 
@@ -172,27 +172,50 @@ const getFechaFiltro = (req) => {
 
 
 const queryValorPorFecha = `
-  SELECT SUM(t.stock * t.costo) AS total
-  FROM (
-    SELECT 
-      mi.producto_id,
-      mi.empresa_id,
-      mi.almacen_id,
-      mi.fabricante_id,
-      mi.stock_resultante AS stock,
-      mi.costo_promedio_resultante AS costo,
-      ROW_NUMBER() OVER (
-        PARTITION BY mi.producto_id, mi.empresa_id, mi.almacen_id, mi.fabricante_id
-        ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
-      ) AS rn
-    FROM movimientos_inventario mi
-    INNER JOIN productos p ON p.id = mi.producto_id
-    WHERE 
-      mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-      AND mi.fecha_validacion_logistica <= ?
-      AND p.categoria_id NOT IN (18, 33) -- 🔥 CLAVE
-  ) t
-  WHERE t.rn = 1
+SELECT 
+  ROUND(SUM(t.stock * t.costo), 2) AS total
+FROM (
+  SELECT 
+    mi.producto_id,
+    mi.empresa_id,
+    mi.almacen_id,
+    mi.fabricante_id,
+
+    -- 🔥 usar últimos valores del movimiento
+    mi.stock_resultante AS stock,
+    mi.costo_promedio_resultante AS costo,
+
+    ROW_NUMBER() OVER (
+      PARTITION BY 
+        mi.producto_id, 
+        mi.empresa_id, 
+        mi.almacen_id, 
+        IFNULL(mi.fabricante_id, 0)
+      ORDER BY 
+        mi.fecha_validacion_logistica DESC, 
+        mi.id DESC
+    ) AS rn
+
+  FROM movimientos_inventario mi
+
+  INNER JOIN productos p 
+    ON p.id = mi.producto_id
+
+  WHERE 
+    mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+
+    -- 🔥 CLAVE: respeta el corte histórico
+    AND mi.fecha_validacion_logistica <= ?
+
+    -- 🔥 MISMA REGLA QUE KPI
+    AND p.categoria_id NOT IN (18, 33)
+
+    -- 🔥 MISMAS REGLAS QUE KPI (TE FALTABAN)
+    AND p.eliminado = 0
+    AND p.activo = 1
+
+) t
+WHERE t.rn = 1
 `;
 /* =====================================================
 FILTRO DINAMICO
