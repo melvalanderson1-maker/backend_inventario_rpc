@@ -738,13 +738,15 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
     res.status(500).json({error:"Error heatmap almacenes"});
   }
 }; // ✅ ← ESTE ES EL IMPORTANTE
+
+
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
     let inicio, fin;
 
     // =========================
-    // 1. VALIDACIÓN SEGURA FECHA
+    // 1. VALIDACIÓN FECHAS
     // =========================
     try {
       ({ inicio, fin } = getFechaFiltro(req));
@@ -755,20 +757,33 @@ exports.getEvolucionInventario = async (req, res) => {
       });
     }
 
-    // =========================
-    // 2. ESTADO ANTERIOR
-    // =========================
+    // =====================================================
+    // 2. ESTADO INICIAL (snapshot antes del mes)
+    // =====================================================
     const [previos] = await pool.query(`
       SELECT 
         empresa_id,
         almacen_id,
         producto_id,
-        cantidad,
-        precio
-      FROM movimientos_inventario
-      WHERE 
-        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND fecha_validacion_logistica < ?
+        stock_resultante,
+        costo_promedio_resultante
+      FROM movimientos_inventario mi
+      INNER JOIN (
+        SELECT 
+          empresa_id,
+          almacen_id,
+          producto_id,
+          MAX(fecha_validacion_logistica) AS max_fecha
+        FROM movimientos_inventario
+        WHERE 
+          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND fecha_validacion_logistica < ?
+        GROUP BY empresa_id, almacen_id, producto_id
+      ) ult
+      ON mi.empresa_id = ult.empresa_id
+      AND mi.almacen_id = ult.almacen_id
+      AND mi.producto_id = ult.producto_id
+      AND mi.fecha_validacion_logistica = ult.max_fecha
     `, [inicio]);
 
     const estado = {};
@@ -776,27 +791,27 @@ exports.getEvolucionInventario = async (req, res) => {
 
     for (const mov of previos) {
 
-      const cantidad = Number(mov.cantidad || 0);
-      const precio = Number(mov.precio || 0);
+      const stock = Number(mov.stock_resultante || 0);
+      const costo = Number(mov.costo_promedio_resultante || 0);
 
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
-      const val = cantidad * precio;
+      const val = stock * costo;
 
       estado[key] = val;
       totalGlobal += val;
     }
 
-    // =========================
-    // 3. MOVIMIENTOS DEL PERIODO
-    // =========================
+    // =====================================================
+    // 3. MOVIMIENTOS DEL PERIODO (para evolución)
+    // =====================================================
     const [rows] = await pool.query(`
       SELECT 
         empresa_id,
         almacen_id,
         producto_id,
         fecha_validacion_logistica,
-        cantidad,
-        precio
+        stock_resultante,
+        costo_promedio_resultante
       FROM movimientos_inventario
       WHERE 
         estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
@@ -806,17 +821,17 @@ exports.getEvolucionInventario = async (req, res) => {
 
     const resultado = [];
 
-    // =========================
-    // 4. EVOLUCIÓN
-    // =========================
+    // =====================================================
+    // 4. EVOLUCIÓN REAL (snapshot incremental)
+    // =====================================================
     for (const mov of rows) {
 
-      const cantidad = Number(mov.cantidad || 0);
-      const precio = Number(mov.precio || 0);
+      const stock = Number(mov.stock_resultante || 0);
+      const costo = Number(mov.costo_promedio_resultante || 0);
 
       const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
 
-      const nuevo = cantidad * precio;
+      const nuevo = stock * costo;
       const anterior = estado[key] || 0;
 
       estado[key] = nuevo;
