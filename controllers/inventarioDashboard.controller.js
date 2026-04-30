@@ -293,6 +293,7 @@ exports.getKPIs = async (req, res) => {
           SELECT 
             mi.empresa_id,
             mi.almacen_id,
+            mi.fabricante_id,
             mi.producto_id,
             mi.stock_resultante AS stock,
             mi.costo_promedio_resultante AS costo
@@ -301,6 +302,7 @@ exports.getKPIs = async (req, res) => {
             SELECT 
               empresa_id,
               almacen_id,
+              fabricante_id,
               producto_id,
               MAX(fecha_validacion_logistica) AS max_fecha
             FROM movimientos_inventario
