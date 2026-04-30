@@ -244,104 +244,130 @@ function joinImagenProducto() {
 /* =====================================================
 KPIs
 ===================================================== */
-exports.getKPIs = async (req,res)=>{
+exports.getKPIs = async (req, res) => {
+  try {
 
-try{
+    // =========================
+    // 1. FECHAS (OBLIGATORIO)
+    // =========================
+    let inicio, fin;
 
-const filteredQuery = buildFilteredQuery(req);
+    try {
+      ({ inicio, fin } = getFechaFiltro(req));
+    } catch (e) {
+      return res.status(400).json({
+        error: "Mes inválido",
+        detalle: e.message
+      });
+    }
 
-/* filtro categoria */
-const { categoria } = req.query;
+    const filteredQuery = buildFilteredQuery(req);
 
-let whereProductos = `
-WHERE eliminado = 0
-AND activo = 1
-`;
+    const { categoria } = req.query;
 
-if(categoria){
-whereProductos += ` AND categoria_id = ${categoria}`;
-}
+    let whereProductos = `
+      WHERE eliminado = 0
+      AND activo = 1
+    `;
 
-const [
-valorInventario,
-inmovilizado,
-productosTotales,
-productosConStock
-] = await Promise.all([
+    if (categoria) {
+      whereProductos += ` AND categoria_id = ${categoria}`;
+    }
 
-/* VALOR INVENTARIO */
+    // =========================
+    // 2. QUERIES EN PARALELO
+    // =========================
+    const [
+      valorInventario,
+      inmovilizado,
+      productosTotales,
+      productosConStock
+    ] = await Promise.all([
 
-pool.query(`
-SELECT ROUND(SUM(t.stock * t.costo),2) total
-FROM (
-  SELECT 
-    mi.empresa_id,
-    mi.almacen_id,
-    mi.producto_id,
-    mi.stock_resultante AS stock,
-    mi.costo_promedio_resultante AS costo
-  FROM movimientos_inventario mi
-  INNER JOIN (
-    SELECT 
-      empresa_id,
-      almacen_id,
-      producto_id,
-      MAX(fecha_validacion_logistica) AS max_fecha
-    FROM movimientos_inventario
-    WHERE 
-      estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-      AND fecha_validacion_logistica <= ?
-    GROUP BY empresa_id, almacen_id, producto_id
-  ) ult
-  ON mi.empresa_id = ult.empresa_id
-  AND mi.almacen_id = ult.almacen_id
-  AND mi.producto_id = ult.producto_id
-  AND mi.fecha_validacion_logistica = ult.max_fecha
-) t
-`),
+      // ============================================
+      // 🔥 VALOR INVENTARIO (MISMA LÓGICA QUE OFICIAL)
+      // ============================================
+      pool.query(`
+        SELECT ROUND(SUM(t.stock * t.costo), 2) AS total
+        FROM (
+          SELECT 
+            mi.empresa_id,
+            mi.almacen_id,
+            mi.producto_id,
+            mi.stock_resultante AS stock,
+            mi.costo_promedio_resultante AS costo
+          FROM movimientos_inventario mi
+          INNER JOIN (
+            SELECT 
+              empresa_id,
+              almacen_id,
+              producto_id,
+              MAX(fecha_validacion_logistica) AS max_fecha
+            FROM movimientos_inventario
+            WHERE 
+              estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+              AND fecha_validacion_logistica <= ?
+            GROUP BY empresa_id, almacen_id, producto_id
+          ) ult
+          ON mi.empresa_id = ult.empresa_id
+          AND mi.almacen_id = ult.almacen_id
+          AND mi.producto_id = ult.producto_id
+          AND mi.fecha_validacion_logistica = ult.max_fecha
+        ) t
+      `, [fin]),   // 🔥 CLAVE: PARAMETRO CORRECTO
 
-/* INVENTARIO INMOVILIZADO */
 
-pool.query(`
-SELECT COUNT(*) total
-FROM (${filteredQuery}) t
-WHERE estado_rotacion='🔴 INVENTARIO INMOVILIZADO'
-`),
+      // ============================================
+      // INVENTARIO INMOVILIZADO
+      // ============================================
+      pool.query(`
+        SELECT COUNT(*) total
+        FROM (${filteredQuery}) t
+        WHERE estado_rotacion = '🔴 INVENTARIO INMOVILIZADO'
+      `),
 
-/* TOTAL PRODUCTOS CATALOGO */
 
-pool.query(`
-SELECT COUNT(*) total
-FROM productos
-${whereProductos}
-`),
+      // ============================================
+      // TOTAL PRODUCTOS
+      // ============================================
+      pool.query(`
+        SELECT COUNT(*) total
+        FROM productos
+        ${whereProductos}
+      `),
 
-/* PRODUCTOS CON STOCK */
 
-pool.query(`
-SELECT COUNT(DISTINCT codigo_producto) total
-FROM (${filteredQuery}) t
-WHERE stock_lote > 0
-`)
+      // ============================================
+      // PRODUCTOS CON STOCK
+      // ============================================
+      pool.query(`
+        SELECT COUNT(DISTINCT codigo_producto) total
+        FROM (${filteredQuery}) t
+        WHERE stock_lote > 0
+      `)
 
-]);
+    ]);
 
-res.json({
+    // =========================
+    // 3. RESPUESTA FINAL
+    // =========================
+    res.json({
+      productos: productosTotales[0][0].total,
+      productos_con_stock: productosConStock[0][0].total,
+      valor: Number(valorInventario[0][0].total || 0),
+      inmovilizado: inmovilizado[0][0].total
+    });
 
-productos: productosTotales[0][0].total,
-productos_con_stock: productosConStock[0][0].total,
-valor: valorInventario[0][0].total || 0,
-inmovilizado: inmovilizado[0][0].total
+  } catch (err) {
 
-});
+    console.error("🔥 ERROR KPIs:", err);
 
-}catch(err){
+    res.status(500).json({
+      error: "Error KPIs",
+      detalle: err.sqlMessage || err.message
+    });
 
-console.error(err);
-res.status(500).json({error:"Error KPIs"});
-
-}
-
+  }
 };
 
 
