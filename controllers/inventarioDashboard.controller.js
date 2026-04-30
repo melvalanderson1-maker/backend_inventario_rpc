@@ -1068,8 +1068,11 @@ exports.getValorInventarioMensual = async (req, res) => {
     let categoriaFilter = "";
     let params = [];
 
+    // 🔥 EXCLUSIÓN FIJA SIEMPRE
+    categoriaFilter += " AND p.categoria_id NOT IN (18, 33) ";
+
     if (categoria) {
-      categoriaFilter = "AND p.categoria_id = ?";
+      categoriaFilter += " AND p.categoria_id = ? ";
       params.push(Number(categoria));
     }
 
@@ -1077,12 +1080,10 @@ exports.getValorInventarioMensual = async (req, res) => {
       WITH base AS (
         SELECT 
           DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
-          
           mi.producto_id,
           mi.empresa_id,
           mi.almacen_id,
           IFNULL(mi.fabricante_id,0) fabricante_id,
-
           mi.stock_resultante AS stock,
           mi.costo_promedio_resultante AS costo,
 
@@ -1162,6 +1163,7 @@ exports.getValorInventarioMes = async (req, res) => {
           AND DATE_FORMAT(mi.fecha_validacion_logistica,'%Y-%m') = ?
           AND p.eliminado = 0
           AND p.activo = 1
+          AND p.categoria_id NOT IN (18, 33)   -- 🔥 AQUÍ AGREGADO
       ) t
       WHERE rn = 1
     `, [mes]);
