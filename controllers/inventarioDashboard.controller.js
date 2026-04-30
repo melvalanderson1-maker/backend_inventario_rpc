@@ -272,8 +272,32 @@ productosConStock
 /* VALOR INVENTARIO */
 
 pool.query(`
-SELECT ROUND(SUM(valor_lote),2) total
-FROM (${filteredQuery}) t
+SELECT ROUND(SUM(t.stock * t.costo),2) total
+FROM (
+  SELECT 
+    mi.empresa_id,
+    mi.almacen_id,
+    mi.producto_id,
+    mi.stock_resultante AS stock,
+    mi.costo_promedio_resultante AS costo
+  FROM movimientos_inventario mi
+  INNER JOIN (
+    SELECT 
+      empresa_id,
+      almacen_id,
+      producto_id,
+      MAX(fecha_validacion_logistica) AS max_fecha
+    FROM movimientos_inventario
+    WHERE 
+      estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+      AND fecha_validacion_logistica <= ?
+    GROUP BY empresa_id, almacen_id, producto_id
+  ) ult
+  ON mi.empresa_id = ult.empresa_id
+  AND mi.almacen_id = ult.almacen_id
+  AND mi.producto_id = ult.producto_id
+  AND mi.fecha_validacion_logistica = ult.max_fecha
+) t
 `),
 
 /* INVENTARIO INMOVILIZADO */
