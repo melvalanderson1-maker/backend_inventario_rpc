@@ -172,25 +172,27 @@ const getFechaFiltro = (req) => {
 
 
 const queryValorPorFecha = `
-  SELECT SUM(stock * costo) AS total
+  SELECT SUM(t.stock * t.costo) AS total
   FROM (
     SELECT 
-      producto_id,
-      empresa_id,
-      almacen_id,
-      fabricante_id,
-      stock_resultante AS stock,
-      costo_promedio_resultante AS costo,
+      mi.producto_id,
+      mi.empresa_id,
+      mi.almacen_id,
+      mi.fabricante_id,
+      mi.stock_resultante AS stock,
+      mi.costo_promedio_resultante AS costo,
       ROW_NUMBER() OVER (
-        PARTITION BY producto_id, empresa_id, almacen_id, fabricante_id
-        ORDER BY fecha_validacion_logistica DESC, id DESC
+        PARTITION BY mi.producto_id, mi.empresa_id, mi.almacen_id, mi.fabricante_id
+        ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
       ) AS rn
-    FROM movimientos_inventario
+    FROM movimientos_inventario mi
+    INNER JOIN productos p ON p.id = mi.producto_id
     WHERE 
-      estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-      AND fecha_validacion_logistica <= ?
+      mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+      AND mi.fecha_validacion_logistica <= ?
+      AND p.categoria_id NOT IN (18, 33) -- 🔥 CLAVE
   ) t
-  WHERE rn = 1
+  WHERE t.rn = 1
 `;
 /* =====================================================
 FILTRO DINAMICO
@@ -739,12 +741,15 @@ exports.getEvolucionInventario = async (req, res) => {
     let inicio, fin;
     ({ inicio, fin } = getFechaFiltro(req));
 
+    // 🔥 fechas del periodo
     const [fechas] = await pool.query(`
-      SELECT DISTINCT DATE(fecha_validacion_logistica) AS fecha
-      FROM movimientos_inventario
+      SELECT DISTINCT DATE(mi.fecha_validacion_logistica) AS fecha
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
       WHERE 
-        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND fecha_validacion_logistica BETWEEN ? AND ?
+        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND mi.fecha_validacion_logistica BETWEEN ? AND ?
+        AND p.categoria_id NOT IN (18, 33) -- 🔥 MISMA REGLA
       ORDER BY fecha ASC
     `, [inicio, fin]);
 
@@ -778,18 +783,20 @@ exports.getEntradasSalidasMes = async (req, res) => {
 
     const [[row]] = await pool.query(`
       SELECT
-        COUNT(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN 1 END) inicializaciones,
-        COUNT(CASE WHEN tipo_movimiento = 'entrada' THEN 1 END) entradas,
-        COUNT(CASE WHEN tipo_movimiento = 'salida' THEN 1 END) salidas,
+        COUNT(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN 1 END) inicializaciones,
+        COUNT(CASE WHEN mi.tipo_movimiento = 'entrada' THEN 1 END) entradas,
+        COUNT(CASE WHEN mi.tipo_movimiento = 'salida' THEN 1 END) salidas,
 
-        SUM(CASE WHEN tipo_movimiento = 'saldo_inicial' THEN cantidad ELSE 0 END) cant_inicial,
-        SUM(CASE WHEN tipo_movimiento = 'entrada' THEN cantidad ELSE 0 END) cant_entradas,
-        SUM(CASE WHEN tipo_movimiento = 'salida' THEN cantidad ELSE 0 END) cant_salidas
+        SUM(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN mi.cantidad ELSE 0 END) cant_inicial,
+        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) cant_entradas,
+        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) cant_salidas
 
-      FROM movimientos_inventario
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
       WHERE 
-        estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND fecha_validacion_logistica BETWEEN ? AND ?
+        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND mi.fecha_validacion_logistica BETWEEN ? AND ?
+        AND p.categoria_id NOT IN (18, 33) -- 🔥 CLAVE
     `, [inicio, fin]);
 
     res.json(row);
@@ -840,21 +847,23 @@ exports.getStockInicial = async (req, res) => {
       SELECT SUM(stock) AS total
       FROM (
         SELECT 
-          empresa_id,
-          almacen_id,
-          producto_id,
-          fabricante_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          mi.producto_id,
+          mi.fabricante_id,
           SUM(
             CASE 
-              WHEN tipo_movimiento IN ('entrada','saldo_inicial') THEN cantidad
-              WHEN tipo_movimiento = 'salida' THEN -cantidad
+              WHEN mi.tipo_movimiento IN ('entrada','saldo_inicial') THEN mi.cantidad
+              WHEN mi.tipo_movimiento = 'salida' THEN -mi.cantidad
             END
           ) AS stock
-        FROM movimientos_inventario
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
         WHERE 
-          estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND fecha_validacion_logistica < ?
-        GROUP BY empresa_id, almacen_id, producto_id, fabricante_id
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND mi.fecha_validacion_logistica < ?
+          AND p.categoria_id NOT IN (18, 33) -- 🔥 CLAVE
+        GROUP BY mi.empresa_id, mi.almacen_id, mi.producto_id, mi.fabricante_id
       ) t
     `, [inicio]);
 
