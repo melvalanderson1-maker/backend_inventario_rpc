@@ -1058,3 +1058,121 @@ exports.getRankingAntiguedad = async (req, res) => {
     res.status(500).json({ error: "Error ranking antiguedad" });
   }
 };
+
+
+exports.getValorInventarioMensual = async (req, res) => {
+  try {
+
+    const { categoria } = req.query;
+
+    let categoriaFilter = "";
+    let params = [];
+
+    if (categoria) {
+      categoriaFilter = "AND p.categoria_id = ?";
+      params.push(Number(categoria));
+    }
+
+    const [rows] = await pool.query(`
+      WITH base AS (
+        SELECT 
+          DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+          
+          mi.producto_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          IFNULL(mi.fabricante_id,0) fabricante_id,
+
+          mi.stock_resultante AS stock,
+          mi.costo_promedio_resultante AS costo,
+
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m'),
+              mi.producto_id,
+              mi.empresa_id,
+              mi.almacen_id,
+              IFNULL(mi.fabricante_id,0)
+            ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
+          ) rn
+
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          ${categoriaFilter}
+          AND p.eliminado = 0
+          AND p.activo = 1
+      )
+
+      SELECT 
+        mes,
+        ROUND(SUM(stock * costo), 2) AS valor_inventario
+      FROM base
+      WHERE rn = 1
+      GROUP BY mes
+      ORDER BY mes ASC
+    `, params);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error valor inventario mensual" });
+  }
+};
+
+
+
+exports.getValorInventarioMes = async (req, res) => {
+  try {
+
+    const { mes } = req.query;
+
+    if (!mes || !/^\d{4}-\d{2}$/.test(mes)) {
+      return res.status(400).json({ error: "mes inválido YYYY-MM" });
+    }
+
+    const [rows] = await pool.query(`
+      SELECT 
+        ROUND(SUM(stock * costo), 2) AS valor_inventario
+      FROM (
+        SELECT 
+          mi.producto_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          IFNULL(mi.fabricante_id,0) fabricante_id,
+
+          mi.stock_resultante AS stock,
+          mi.costo_promedio_resultante AS costo,
+
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              mi.producto_id,
+              mi.empresa_id,
+              mi.almacen_id,
+              IFNULL(mi.fabricante_id,0)
+            ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
+          ) rn
+
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND DATE_FORMAT(mi.fecha_validacion_logistica,'%Y-%m') = ?
+          AND p.eliminado = 0
+          AND p.activo = 1
+      ) t
+      WHERE rn = 1
+    `, [mes]);
+
+    res.json({
+      mes,
+      valor_inventario: Number(rows[0]?.valor_inventario || 0)
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error valor inventario mes" });
+  }
+};

@@ -55,6 +55,14 @@ router.get("/ranking-antiguedad", controller.getRankingAntiguedad);
 
 router.get("/valor-inventario", controller.getValorInventario);
 
+
+
+router.get("/valor-inventario-mensual", controller.getValorInventarioMensual);
+
+router.get("/valor-inventario-mes", controller.getValorInventarioMes);
+
+
+
 // 🔥 DETALLE POR PRODUCTO (CLAVE)
 router.get("/movimientos-producto/:id", controller.getMovimientosProducto);
 
