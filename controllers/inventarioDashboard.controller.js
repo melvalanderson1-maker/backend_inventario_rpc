@@ -311,6 +311,7 @@ exports.getKPIs = async (req, res) => {
           ) ult
           ON mi.empresa_id = ult.empresa_id
           AND mi.almacen_id = ult.almacen_id
+          AND mi.fabricante_id = ult.fabricante_id
           AND mi.producto_id = ult.producto_id
           AND mi.fecha_validacion_logistica = ult.max_fecha
         ) t
@@ -855,6 +856,7 @@ exports.getEvolucionInventario = async (req, res) => {
       SELECT 
         empresa_id,
         almacen_id,
+        fabricante_id,
         producto_id,
         fecha_validacion_logistica,
         stock_resultante,
