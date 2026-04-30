@@ -895,13 +895,16 @@ exports.getEntradasSalidasMes = async (req, res) => {
 
     const [[row]] = await pool.query(`
       SELECT
-        COUNT(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN 1 END) inicializaciones,
-        COUNT(CASE WHEN mi.tipo_movimiento = 'entrada' THEN 1 END) entradas,
-        COUNT(CASE WHEN mi.tipo_movimiento = 'salida' THEN 1 END) salidas,
 
-        SUM(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN mi.cantidad ELSE 0 END) cant_inicial,
-        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) cant_entradas,
-        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) cant_salidas
+      -- 🔵 KPI 1: NÚMERO DE MOVIMIENTOS
+      COUNT(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN 1 END) movimientos_inicial,
+      COUNT(CASE WHEN mi.tipo_movimiento = 'entrada' THEN 1 END) movimientos_entrada,
+      COUNT(CASE WHEN mi.tipo_movimiento = 'salida' THEN 1 END) movimientos_salida,
+
+      -- 🟢 KPI 2: CANTIDAD REAL MOVIDA
+      SUM(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN mi.cantidad ELSE 0 END) unidades_inicial,
+      SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) unidades_entrada,
+      SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) unidades_salida
 
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
