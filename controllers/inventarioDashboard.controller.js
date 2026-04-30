@@ -307,7 +307,7 @@ exports.getKPIs = async (req, res) => {
             WHERE 
               estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
               AND fecha_validacion_logistica <= ?
-            GROUP BY empresa_id, almacen_id, producto_id
+            GROUP BY empresa_id, almacen_id, producto_id, fabricante_id
           ) ult
           ON mi.empresa_id = ult.empresa_id
           AND mi.almacen_id = ult.almacen_id
@@ -826,6 +826,7 @@ exports.getEvolucionInventario = async (req, res) => {
           WHERE 
             mi2.empresa_id = movimientos_inventario.empresa_id
             AND mi2.almacen_id = movimientos_inventario.almacen_id
+            AND mi2.fabricante_id = movimientos_inventario.fabricante_id
             AND mi2.producto_id = movimientos_inventario.producto_id
             AND mi2.fecha_validacion_logistica < ?
         )
@@ -841,7 +842,7 @@ exports.getEvolucionInventario = async (req, res) => {
 
       const valor = stock * costo;
 
-      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
+      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}|${mov.fabricante_id}`;
 
       estado[key] = valor;
       totalGlobal += valor;
@@ -877,7 +878,7 @@ exports.getEvolucionInventario = async (req, res) => {
 
       const valorNuevo = stock * costo;
 
-      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}`;
+      const key = `${mov.empresa_id}|${mov.almacen_id}|${mov.producto_id}|${mov.fabricante_id}`;
 
       const valorAnterior = estado[key] ?? 0;
 
@@ -977,15 +978,17 @@ exports.getValorInventario = async (req, res) => {
             empresa_id,
             almacen_id,
             producto_id,
+            fabricante_id,
             MAX(fecha_validacion_logistica) AS max_fecha
           FROM movimientos_inventario
           WHERE 
             estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
             AND fecha_validacion_logistica <= ?
-          GROUP BY empresa_id, almacen_id, producto_id
+          GROUP BY empresa_id, almacen_id, producto_id, fabricante_id
         ) ult
         ON mi.empresa_id = ult.empresa_id
         AND mi.almacen_id = ult.almacen_id
+        AND mi.fabricante_id = ult.fabricante_id
         AND mi.producto_id = ult.producto_id
         AND mi.fecha_validacion_logistica = ult.max_fecha
       ) t
@@ -1016,7 +1019,7 @@ exports.getValorInventario = async (req, res) => {
           WHERE 
             estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
             AND fecha_validacion_logistica <= ?
-          GROUP BY empresa_id, almacen_id, producto_id
+          GROUP BY empresa_id, almacen_id, producto_id, fabricante_id
         ) ult
         ON mi.empresa_id = ult.empresa_id
         AND mi.almacen_id = ult.almacen_id
@@ -1068,7 +1071,7 @@ exports.getStockInicial = async (req, res) => {
         WHERE 
           estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
           AND fecha_validacion_logistica < ?
-        GROUP BY empresa_id, almacen_id, producto_id
+        GROUP BY empresa_id, almacen_id, producto_id, fabricante_id
       ) t
     `, [inicio]);
 
