@@ -179,9 +179,8 @@ FROM (
     mi.producto_id,
     mi.empresa_id,
     mi.almacen_id,
-    mi.fabricante_id,
+    IFNULL(mi.fabricante_id,0) fabricante_id,
 
-    -- 🔥 usar últimos valores del movimiento
     mi.stock_resultante AS stock,
     mi.costo_promedio_resultante AS costo,
 
@@ -190,27 +189,22 @@ FROM (
         mi.producto_id, 
         mi.empresa_id, 
         mi.almacen_id, 
-        IFNULL(mi.fabricante_id, 0)
+        IFNULL(mi.fabricante_id,0)
       ORDER BY 
         mi.fecha_validacion_logistica DESC, 
         mi.id DESC
     ) AS rn
 
   FROM movimientos_inventario mi
-
-  INNER JOIN productos p 
-    ON p.id = mi.producto_id
+  INNER JOIN productos p ON p.id = mi.producto_id
 
   WHERE 
     mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
 
-    -- 🔥 CLAVE: respeta el corte histórico
-    AND mi.fecha_validacion_logistica <= ?
+    -- 🔥 CORRECCIÓN REAL
+    AND mi.fecha_validacion_logistica <= CONCAT(?, ' 23:59:59')
 
-    -- 🔥 MISMA REGLA QUE KPI
     AND p.categoria_id NOT IN (18, 33)
-
-    -- 🔥 MISMAS REGLAS QUE KPI (TE FALTABAN)
     AND p.eliminado = 0
     AND p.activo = 1
 
@@ -288,21 +282,59 @@ exports.getKPIs = async (req, res) => {
       whereProductos += ` AND categoria_id = ${categoria}`;
     }
 
+    // 🔥 FECHA ACTUAL (IMPORTANTE)
+    const hoy = new Date().toISOString().split("T")[0];
+
+    // 🔥 CLONAMOS queryValorPorFecha PERO SIN PARAMETRO EXTERNO
+    const queryValorActual = `
+      SELECT 
+        ROUND(SUM(t.stock * t.costo), 2) AS total
+      FROM (
+        SELECT 
+          mi.producto_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          IFNULL(mi.fabricante_id,0) fabricante_id,
+
+          mi.stock_resultante AS stock,
+          mi.costo_promedio_resultante AS costo,
+
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              mi.producto_id, 
+              mi.empresa_id, 
+              mi.almacen_id, 
+              IFNULL(mi.fabricante_id,0)
+            ORDER BY 
+              mi.fecha_validacion_logistica DESC, 
+              mi.id DESC
+          ) AS rn
+
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+
+          -- 🔥 ESTADO ACTUAL REAL
+          AND mi.fecha_validacion_logistica <= CONCAT(?, ' 23:59:59')
+
+          AND p.categoria_id NOT IN (18, 33)
+          AND p.eliminado = 0
+          AND p.activo = 1
+
+      ) t
+      WHERE t.rn = 1
+    `;
+
     const [
       valorInventario,
       productosTotales,
       productosConStock
     ] = await Promise.all([
 
-      // ✅ VALOR REAL
-      pool.query(`
-        SELECT ROUND(SUM(sp.valor_stock), 2) AS total
-        FROM stock_producto sp
-        INNER JOIN productos p ON p.id = sp.producto_id
-        WHERE 
-          sp.cantidad > 0
-          AND p.categoria_id NOT IN (18, 33)
-      `),
+      // ✅ NUEVO VALOR CORRECTO
+      pool.query(queryValorActual, [hoy]),
 
       // TOTAL PRODUCTOS
       pool.query(`
@@ -311,15 +343,42 @@ exports.getKPIs = async (req, res) => {
         ${whereProductos}
       `),
 
-      // PRODUCTOS CON STOCK (CORREGIDO)
+      // PRODUCTOS CON STOCK (también corregido)
       pool.query(`
-        SELECT COUNT(DISTINCT sp.producto_id) total
-        FROM stock_producto sp
-        INNER JOIN productos p ON p.id = sp.producto_id
-        WHERE 
-          sp.cantidad > 0
-          AND p.categoria_id NOT IN (18, 33)
-      `)
+        SELECT COUNT(*) total
+        FROM (
+          SELECT 
+            mi.producto_id,
+            mi.empresa_id,
+            mi.almacen_id,
+            IFNULL(mi.fabricante_id,0) fabricante_id,
+
+            mi.stock_resultante,
+
+            ROW_NUMBER() OVER (
+              PARTITION BY 
+                mi.producto_id, 
+                mi.empresa_id, 
+                mi.almacen_id, 
+                IFNULL(mi.fabricante_id,0)
+              ORDER BY 
+                mi.fecha_validacion_logistica DESC, 
+                mi.id DESC
+            ) rn
+
+          FROM movimientos_inventario mi
+          INNER JOIN productos p ON p.id = mi.producto_id
+
+          WHERE 
+            mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+            AND mi.fecha_validacion_logistica <= CONCAT(?, ' 23:59:59')
+            AND p.categoria_id NOT IN (18, 33)
+            AND p.eliminado = 0
+            AND p.activo = 1
+
+        ) t
+        WHERE rn = 1 AND stock_resultante > 0
+      `, [hoy])
 
     ]);
 
@@ -761,34 +820,64 @@ exports.getHeatmapAlmacenes = async (req,res)=>{
 exports.getEvolucionInventario = async (req, res) => {
   try {
 
-    let inicio, fin;
-    ({ inicio, fin } = getFechaFiltro(req));
+    const { inicio, fin } = getFechaFiltro(req);
 
-    // 🔥 fechas del periodo
-    const [fechas] = await pool.query(`
-      SELECT DISTINCT DATE(mi.fecha_validacion_logistica) AS fecha
-      FROM movimientos_inventario mi
-      INNER JOIN productos p ON p.id = mi.producto_id
-      WHERE 
-        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND mi.fecha_validacion_logistica BETWEEN ? AND ?
-        AND p.categoria_id NOT IN (18, 33) -- 🔥 MISMA REGLA
-      ORDER BY fecha ASC
+    const [rows] = await pool.query(`
+      WITH fechas AS (
+        SELECT DISTINCT DATE(mi.fecha_validacion_logistica) fecha
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
+          AND p.categoria_id NOT IN (18, 33)
+      ),
+
+      ultimos AS (
+        SELECT 
+          f.fecha,
+
+          mi.producto_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          IFNULL(mi.fabricante_id,0) fabricante_id,
+
+          mi.stock_resultante stock,
+          mi.costo_promedio_resultante costo,
+
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              f.fecha,
+              mi.producto_id,
+              mi.empresa_id,
+              mi.almacen_id,
+              IFNULL(mi.fabricante_id,0)
+            ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
+          ) rn
+
+        FROM fechas f
+        JOIN movimientos_inventario mi
+          ON mi.fecha_validacion_logistica <= CONCAT(f.fecha,' 23:59:59')
+
+        JOIN productos p ON p.id = mi.producto_id
+
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND p.categoria_id NOT IN (18, 33)
+          AND p.eliminado = 0
+          AND p.activo = 1
+      )
+
+      SELECT 
+        fecha,
+        ROUND(SUM(stock * costo),2) total
+      FROM ultimos
+      WHERE rn = 1
+      GROUP BY fecha
+      ORDER BY fecha
     `, [inicio, fin]);
 
-    const resultado = [];
-
-    for (const f of fechas) {
-
-      const [rows] = await pool.query(queryValorPorFecha, [f.fecha]);
-
-      resultado.push({
-        fecha: f.fecha,
-        total: Number(rows[0]?.total || 0)
-      });
-    }
-
-    res.json(resultado);
+    res.json(rows);
 
   } catch (err) {
     console.error(err);
