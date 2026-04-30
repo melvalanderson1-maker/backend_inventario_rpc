@@ -901,9 +901,7 @@ exports.getValorInventario = async (req, res) => {
     let inicio, fin;
 
     try {
-      const fechas = getFechaFiltro(req);
-      inicio = fechas.inicio;
-      fin = fechas.fin;
+      ({ inicio, fin } = getFechaFiltro(req));
     } catch (e) {
       return res.status(400).json({
         error: "Mes inválido",
@@ -911,9 +909,9 @@ exports.getValorInventario = async (req, res) => {
       });
     }
 
-    // =========================
-    // VALOR FINAL
-    // =========================
+    // =====================================================
+    // 🔥 VALOR FINAL CORRECTO (CORTE AL FIN DEL MES)
+    // =====================================================
     const [rows] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
@@ -931,8 +929,9 @@ exports.getValorInventario = async (req, res) => {
             producto_id,
             MAX(fecha_validacion_logistica) AS max_fecha
           FROM movimientos_inventario
-          WHERE estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-            AND fecha_validacion_logistica BETWEEN ? AND ?
+          WHERE 
+            estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+            AND fecha_validacion_logistica <= ?
           GROUP BY empresa_id, almacen_id, producto_id
         ) ult
         ON mi.empresa_id = ult.empresa_id
@@ -940,13 +939,13 @@ exports.getValorInventario = async (req, res) => {
         AND mi.producto_id = ult.producto_id
         AND mi.fecha_validacion_logistica = ult.max_fecha
       ) t
-    `, [inicio, fin]);
+    `, [fin]);
 
     const valorFinal = rows[0]?.total || 0;
 
-    // =========================
-    // VALOR INICIAL
-    // =========================
+    // =====================================================
+    // 🔥 VALOR INICIAL (CORTE INICIO MES)
+    // =====================================================
     const [rowsIni] = await pool.query(`
       SELECT SUM(t.stock * t.costo) AS total
       FROM (
@@ -955,22 +954,30 @@ exports.getValorInventario = async (req, res) => {
           mi.almacen_id,
           mi.producto_id,
           mi.stock_resultante AS stock,
-          mi.costo_promedio_resultante AS costo,
-          ROW_NUMBER() OVER (
-            PARTITION BY mi.empresa_id, mi.almacen_id, mi.producto_id
-            ORDER BY mi.fecha_validacion_logistica DESC
-          ) rn
+          mi.costo_promedio_resultante AS costo
         FROM movimientos_inventario mi
-        WHERE 
-          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica < ?
+        INNER JOIN (
+          SELECT 
+            empresa_id,
+            almacen_id,
+            producto_id,
+            MAX(fecha_validacion_logistica) AS max_fecha
+          FROM movimientos_inventario
+          WHERE 
+            estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+            AND fecha_validacion_logistica <= ?
+          GROUP BY empresa_id, almacen_id, producto_id
+        ) ult
+        ON mi.empresa_id = ult.empresa_id
+        AND mi.almacen_id = ult.almacen_id
+        AND mi.producto_id = ult.producto_id
+        AND mi.fecha_validacion_logistica = ult.max_fecha
       ) t
-      WHERE t.rn = 1
     `, [inicio]);
 
     const valorInicial = rowsIni[0]?.total || 0;
 
-    res.json({
+    return res.json({
       valor_inicial: valorInicial,
       valor_final: valorFinal,
       variacion: valorFinal - valorInicial
@@ -978,7 +985,7 @@ exports.getValorInventario = async (req, res) => {
 
   } catch (err) {
     console.error("ERROR VALOR INVENTARIO:", err);
-    res.status(500).json({
+    return res.status(500).json({
       error: "Error valor inventario",
       detalle: err.sqlMessage || err.message
     });
