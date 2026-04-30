@@ -975,6 +975,7 @@ exports.getValorInventario = async (req, res) => {
           mi.empresa_id,
           mi.almacen_id,
           mi.producto_id,
+          mi.fabricante_id,
           mi.stock_resultante AS stock,
           mi.costo_promedio_resultante AS costo
         FROM movimientos_inventario mi
@@ -1011,6 +1012,7 @@ exports.getValorInventario = async (req, res) => {
           mi.empresa_id,
           mi.almacen_id,
           mi.producto_id,
+          mi.fabricante_id,
           mi.stock_resultante AS stock,
           mi.costo_promedio_resultante AS costo
         FROM movimientos_inventario mi
@@ -1019,6 +1021,7 @@ exports.getValorInventario = async (req, res) => {
             empresa_id,
             almacen_id,
             producto_id,
+            fabricante_id,
             MAX(fecha_validacion_logistica) AS max_fecha
           FROM movimientos_inventario
           WHERE 
