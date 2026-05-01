@@ -1178,3 +1178,40 @@ exports.getValorInventarioMes = async (req, res) => {
     res.status(500).json({ error: "Error valor inventario mes" });
   }
 };
+
+
+exports.getVariacionInventarioMes = async (req, res) => {
+  try {
+
+    let inicio, fin;
+    ({ inicio, fin } = getFechaFiltro(req));
+
+    // 🔵 valor al inicio del mes
+    const [iniRows] = await pool.query(queryValorPorFecha, [inicio]);
+
+    // 🔵 valor al final del mes
+    const [finRows] = await pool.query(queryValorPorFecha, [fin]);
+
+    const valorInicial = Number(iniRows[0]?.total || 0);
+    const valorFinal = Number(finRows[0]?.total || 0);
+
+    const variacion = valorFinal - valorInicial;
+
+    res.json({
+      valor_inicial: valorInicial,
+      valor_final: valorFinal,
+      variacion,
+      interpretacion:
+        variacion > 0
+          ? "Incremento de inventario"
+          : "Reducción de inventario"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Error variación inventario mes",
+      detalle: err.message
+    });
+  }
+};

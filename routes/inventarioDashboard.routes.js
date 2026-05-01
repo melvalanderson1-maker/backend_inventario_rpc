@@ -62,6 +62,8 @@ router.get("/valor-inventario-mensual", controller.getValorInventarioMensual);
 router.get("/valor-inventario-mes", controller.getValorInventarioMes);
 
 
+router.get("/variacion-inventario", controller.getVariacionInventarioMes);
+
 
 // 🔥 DETALLE POR PRODUCTO (CLAVE)
 router.get("/movimientos-producto/:id", controller.getMovimientosProducto);
