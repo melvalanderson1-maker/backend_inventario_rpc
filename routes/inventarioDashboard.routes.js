@@ -47,6 +47,9 @@ router.get("/evolucion-inventario", controller.getEvolucionInventario);
 
 router.get("/entradas-salidas", controller.getEntradasSalidasMes);
 
+
+router.get("/dashboard/entradas-salidas-anual", controller.getEntradasSalidasAnual);
+
 router.get("/stock-inicial", controller.getStockInicial);
 
 router.get("/sin-movimiento", controller.getSinMovimiento);
@@ -67,6 +70,8 @@ router.get("/variacion-inventario", controller.getVariacionInventarioMes);
 
 // 🔥 NUEVO: RESUMEN ANUAL
 router.get("/resumen-anual", controller.getResumenAnual);
+
+
 
 
 // 🔥 DETALLE POR PRODUCTO (CLAVE)
