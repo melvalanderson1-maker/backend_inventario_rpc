@@ -64,6 +64,11 @@ SELECT
 
 p.codigo codigo_producto,
 p.descripcion producto,
+
+img.storage_provider,
+img.storage_key,
+
+
 p.categoria_id,
 c.nombre categoria,
 
@@ -103,6 +108,19 @@ SUM(lv.valor_lote) OVER(PARTITION BY lv.producto_id),
 
 FROM lotes_valorizados lv
 JOIN productos p ON p.id=lv.producto_id
+
+JOIN productos p ON p.id=lv.producto_id
+
+LEFT JOIN (
+  SELECT 
+    producto_id,
+    MIN(storage_provider) AS storage_provider,
+    MIN(storage_key) AS storage_key
+  FROM imagenes
+  WHERE tipo = 'producto'
+  GROUP BY producto_id
+) img ON img.producto_id = p.id
+
 JOIN empresas e ON e.id=lv.empresa_id
 JOIN almacenes a ON a.id=lv.almacen_id
 LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
