@@ -584,8 +584,27 @@ exports.getInventario = async (req, res) => {
     }
 
     let finalQuery = `
-      SELECT *
+      SELECT 
+        t.*,
+        img.storage_provider,
+        img.storage_key
       FROM (${baseQuery}) t
+
+      -- 🔥 JOIN REAL DE IMAGEN
+      JOIN productos p ON p.codigo = t.codigo_producto
+
+      LEFT JOIN (
+        SELECT i1.producto_id, i1.storage_provider, i1.storage_key
+        FROM imagenes i1
+        INNER JOIN (
+          SELECT producto_id, MIN(id) AS min_id
+          FROM imagenes
+          WHERE tipo = 'producto'
+          GROUP BY producto_id
+        ) i2 
+          ON i1.producto_id = i2.producto_id 
+          AND i1.id = i2.min_id
+      ) img ON img.producto_id = p.id
     `;
 
     if (conditions.length > 0) {
@@ -601,7 +620,7 @@ exports.getInventario = async (req, res) => {
 
     finalQuery += ` LIMIT ? OFFSET ?`;
 
-    // 🔥 PARAMETROS DINÁMICOS
+    // 🔥 PARAMETROS
     const params = [];
 
     if (producto) {
@@ -612,7 +631,7 @@ exports.getInventario = async (req, res) => {
 
     const [rows] = await pool.query(finalQuery, params);
 
-    // 🔥 COUNT (MISMA CONDICIÓN)
+    // 🔥 COUNT (SIN IMAGEN, MÁS RÁPIDO)
     let countQuery = `
       SELECT COUNT(*) total
       FROM (${baseQuery}) t
