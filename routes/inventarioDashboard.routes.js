@@ -65,6 +65,10 @@ router.get("/valor-inventario-mes", controller.getValorInventarioMes);
 router.get("/variacion-inventario", controller.getVariacionInventarioMes);
 
 
+// 🔥 NUEVO: RESUMEN ANUAL
+router.get("/resumen-anual", controller.getResumenAnual);
+
+
 // 🔥 DETALLE POR PRODUCTO (CLAVE)
 router.get("/movimientos-producto/:id", controller.getMovimientosProducto);
 

@@ -1215,3 +1215,114 @@ exports.getVariacionInventarioMes = async (req, res) => {
     });
   }
 };
+
+
+
+// =====================================================
+// RESUMEN ANUAL (12 MESES)
+// =====================================================
+exports.getResumenAnual = async (req, res) => {
+  try {
+
+    const anio = Number(req.query.anio);
+
+    if (!anio || isNaN(anio)) {
+      return res.status(400).json({ error: "Año inválido" });
+    }
+
+    // 🔥 GENERAR LOS 12 MESES SIEMPRE
+    const meses = Array.from({ length: 12 }, (_, i) => {
+      const mes = String(i + 1).padStart(2, "0");
+      return `${anio}-${mes}`;
+    });
+
+    // 🔵 ENTRADAS / SALIDAS AGRUPADAS POR MES
+    const [movimientos] = await pool.query(`
+      SELECT 
+        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+
+        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) entradas,
+        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) salidas
+
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
+
+      WHERE 
+        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND YEAR(mi.fecha_validacion_logistica) = ?
+        AND p.categoria_id NOT IN (18, 33)
+        AND p.eliminado = 0
+        AND p.activo = 1
+
+      GROUP BY mes
+    `, [anio]);
+
+    // 🔵 VALOR INVENTARIO POR MES (YA LO TIENES CASI HECHO)
+    const [valores] = await pool.query(`
+      WITH base AS (
+        SELECT 
+          DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+
+          mi.producto_id,
+          mi.empresa_id,
+          mi.almacen_id,
+          IFNULL(mi.fabricante_id,0) fabricante_id,
+
+          mi.stock_resultante AS stock,
+          mi.costo_promedio_resultante AS costo,
+
+          ROW_NUMBER() OVER (
+            PARTITION BY 
+              DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m'),
+              mi.producto_id,
+              mi.empresa_id,
+              mi.almacen_id,
+              IFNULL(mi.fabricante_id,0)
+            ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
+          ) rn
+
+        FROM movimientos_inventario mi
+        INNER JOIN productos p ON p.id = mi.producto_id
+
+        WHERE 
+          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+          AND YEAR(mi.fecha_validacion_logistica) = ?
+          AND p.categoria_id NOT IN (18, 33)
+          AND p.eliminado = 0
+          AND p.activo = 1
+      )
+
+      SELECT 
+        mes,
+        ROUND(SUM(stock * costo), 2) AS valor
+      FROM base
+      WHERE rn = 1
+      GROUP BY mes
+    `, [anio]);
+
+    // 🔥 CONVERTIR A MAPA (rápido lookup)
+    const mapMov = {};
+    movimientos.forEach(m => {
+      mapMov[m.mes] = m;
+    });
+
+    const mapVal = {};
+    valores.forEach(v => {
+      mapVal[v.mes] = v;
+    });
+
+    // 🔥 ARMAR RESPUESTA COMPLETA (12 MESES SIEMPRE)
+    const resultado = meses.map(mes => ({
+      mes,
+      entradas: Number(mapMov[mes]?.entradas || 0),
+      salidas: Number(mapMov[mes]?.salidas || 0),
+      valor: Number(mapVal[mes]?.valor || 0)
+    }));
+
+    res.json(resultado);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error resumen anual" });
+  }
+};
