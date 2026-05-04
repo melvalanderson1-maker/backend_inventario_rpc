@@ -1223,20 +1223,19 @@ exports.getVariacionInventarioMes = async (req, res) => {
 // =====================================================
 exports.getResumenAnual = async (req, res) => {
   try {
-
     const anio = Number(req.query.anio);
 
     if (!anio || isNaN(anio)) {
       return res.status(400).json({ error: "Año inválido" });
     }
 
-    // 🔥 GENERAR LOS 12 MESES SIEMPRE
+    // 🔥 GENERAR LOS 12 MESES
     const meses = Array.from({ length: 12 }, (_, i) => {
       const mes = String(i + 1).padStart(2, "0");
       return `${anio}-${mes}`;
     });
 
-    // 🔵 ENTRADAS / SALIDAS AGRUPADAS POR MES
+    // 🔵 MOVIMIENTOS
     const [movimientos] = await pool.query(`
       SELECT 
         DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
@@ -1257,7 +1256,7 @@ exports.getResumenAnual = async (req, res) => {
       GROUP BY mes
     `, [anio]);
 
-    // 🔵 VALOR INVENTARIO POR MES (YA LO TIENES CASI HECHO)
+    // 🔵 VALOR INVENTARIO ACUMULADO
     const [valores] = await pool.query(`
       WITH base AS (
         SELECT 
@@ -1294,13 +1293,19 @@ exports.getResumenAnual = async (req, res) => {
 
       SELECT 
         mes,
-        ROUND(SUM(stock * costo), 2) AS valor
+        ROUND(
+          SUM(SUM(stock * costo)) OVER (
+            ORDER BY mes
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          ), 2
+        ) AS valor
       FROM base
       WHERE rn = 1
       GROUP BY mes
+      ORDER BY mes
     `, [anio]);
 
-    // 🔥 CONVERTIR A MAPA (rápido lookup)
+    // 🔥 MAPAS
     const mapMov = {};
     movimientos.forEach(m => {
       mapMov[m.mes] = m;
@@ -1311,7 +1316,7 @@ exports.getResumenAnual = async (req, res) => {
       mapVal[v.mes] = v;
     });
 
-    // 🔥 ARMAR RESPUESTA COMPLETA (12 MESES SIEMPRE)
+    // 🔥 RESPUESTA FINAL
     const resultado = meses.map(mes => ({
       mes,
       entradas: Number(mapMov[mes]?.entradas || 0),
