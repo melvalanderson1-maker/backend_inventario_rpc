@@ -282,10 +282,14 @@ exports.getKPIs = async (req, res) => {
       whereProductos += ` AND categoria_id = ${categoria}`;
     }
 
-    // 🔥 FECHA ACTUAL (IMPORTANTE)
+    // 🔥 FILTRO PARA MOVIMIENTOS
+    let filtroCategoria = "";
+    if (categoria) {
+      filtroCategoria = ` AND p.categoria_id = ${categoria} `;
+    }
+
     const hoy = new Date().toISOString().split("T")[0];
 
-    // 🔥 CLONAMOS queryValorPorFecha PERO SIN PARAMETRO EXTERNO
     const queryValorActual = `
       SELECT 
         ROUND(SUM(t.stock * t.costo), 2) AS total
@@ -315,11 +319,11 @@ exports.getKPIs = async (req, res) => {
 
         WHERE 
           mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-
-          -- 🔥 ESTADO ACTUAL REAL
           AND mi.fecha_validacion_logistica <= CONCAT(?, ' 23:59:59')
 
           AND p.categoria_id NOT IN (18, 33)
+          ${filtroCategoria}
+
           AND p.eliminado = 0
           AND p.activo = 1
 
@@ -333,17 +337,14 @@ exports.getKPIs = async (req, res) => {
       productosConStock
     ] = await Promise.all([
 
-      // ✅ NUEVO VALOR CORRECTO
       pool.query(queryValorActual, [hoy]),
 
-      // TOTAL PRODUCTOS
       pool.query(`
         SELECT COUNT(*) total
         FROM productos
         ${whereProductos}
       `),
 
-      // PRODUCTOS CON STOCK (también corregido)
       pool.query(`
         SELECT COUNT(*) total
         FROM (
@@ -372,7 +373,10 @@ exports.getKPIs = async (req, res) => {
           WHERE 
             mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
             AND mi.fecha_validacion_logistica <= CONCAT(?, ' 23:59:59')
+
             AND p.categoria_id NOT IN (18, 33)
+            ${filtroCategoria}
+
             AND p.eliminado = 0
             AND p.activo = 1
 
