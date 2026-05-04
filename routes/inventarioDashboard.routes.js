@@ -48,7 +48,7 @@ router.get("/evolucion-inventario", controller.getEvolucionInventario);
 router.get("/entradas-salidas", controller.getEntradasSalidasMes);
 
 
-router.get("/dashboard/entradas-salidas-anual", controller.getEntradasSalidasAnual);
+router.get("/entradas-salidas-anual", controller.getEntradasSalidasAnual);
 
 router.get("/stock-inicial", controller.getStockInicial);
 

@@ -932,67 +932,57 @@ exports.getEntradasSalidasMes = async (req, res) => {
 exports.getEntradasSalidasAnual = async (req, res) => {
   try {
 
-    const anio = Number(req.query.anio);
+    const anio = req.query.anio || new Date().getFullYear();
 
-    if (!anio || isNaN(anio)) {
-      return res.status(400).json({ error: "Año inválido" });
-    }
+    const [rows] = await pool.query(`
+      SELECT 
 
+        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+
+        -- 🔵 MOVIMIENTOS
+        COUNT(CASE WHEN mi.tipo_movimiento = 'entrada' THEN 1 END) AS movimientos_entrada,
+        COUNT(CASE WHEN mi.tipo_movimiento = 'salida' THEN 1 END) AS movimientos_salida,
+
+        -- 🟢 CANTIDAD
+        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) AS unidades_entrada,
+        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) AS unidades_salida
+
+      FROM movimientos_inventario mi
+      INNER JOIN productos p ON p.id = mi.producto_id
+
+      WHERE 
+        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+        AND YEAR(mi.fecha_validacion_logistica) = ?
+        AND p.categoria_id NOT IN (18, 33)
+
+      GROUP BY mes
+      ORDER BY mes ASC
+    `, [anio]);
+
+    // 🔥 COMPLETAR MESES FALTANTES (ENERO-DICIEMBRE)
     const meses = Array.from({ length: 12 }, (_, i) => {
-      const mes = String(i + 1).padStart(2, "0");
-      return `${anio}-${mes}`;
+      const m = String(i + 1).padStart(2, "0");
+      return `${anio}-${m}`;
     });
 
-    const resultado = [];
+    const mapa = {};
+    rows.forEach(r => {
+      mapa[r.mes] = r;
+    });
 
-    for (const mes of meses) {
+    const resultadoFinal = meses.map(mes => ({
+      mes,
+      movimientos_entrada: Number(mapa[mes]?.movimientos_entrada || 0),
+      movimientos_salida: Number(mapa[mes]?.movimientos_salida || 0),
+      unidades_entrada: Number(mapa[mes]?.unidades_entrada || 0),
+      unidades_salida: Number(mapa[mes]?.unidades_salida || 0),
+    }));
 
-      const inicio = `${mes}-01`;
-
-      const [year, month] = mes.split("-").map(Number);
-      const lastDay = new Date(year, month, 0).getDate();
-
-      const fin = `${mes}-${String(lastDay).padStart(2, "0")} 23:59:59`;
-
-      const [[row]] = await pool.query(`
-        SELECT
-
-        -- 🔵 NUMERO DE MOVIMIENTOS
-        COUNT(CASE WHEN mi.tipo_movimiento = 'entrada' THEN 1 END) movimientos_entrada,
-        COUNT(CASE WHEN mi.tipo_movimiento = 'salida' THEN 1 END) movimientos_salida,
-
-        -- 🟢 CANTIDAD DE PRODUCTOS
-        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) unidades_entrada,
-        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) unidades_salida
-
-        FROM movimientos_inventario mi
-        INNER JOIN productos p ON p.id = mi.producto_id
-        WHERE 
-          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
-          AND p.categoria_id NOT IN (18, 33)
-          AND p.eliminado = 0
-          AND p.activo = 1
-      `, [inicio, fin]);
-
-      resultado.push({
-        mes,
-
-        // 🔵 movimientos (lo que tú pediste)
-        movimientos_entrada: Number(row.movimientos_entrada || 0),
-        movimientos_salida: Number(row.movimientos_salida || 0),
-
-        // 🟢 cantidades
-        entradas: Number(row.unidades_entrada || 0),
-        salidas: Number(row.unidades_salida || 0)
-      });
-    }
-
-    res.json(resultado);
+    res.json(resultadoFinal);
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error entradas/salidas anual" });
+    res.status(500).json({ error: "Error anual" });
   }
 };
 
