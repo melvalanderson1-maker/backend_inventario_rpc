@@ -1229,100 +1229,56 @@ exports.getResumenAnual = async (req, res) => {
       return res.status(400).json({ error: "Año inválido" });
     }
 
-    // 🔥 GENERAR LOS 12 MESES
+    // 🔥 GENERAR 12 MESES
     const meses = Array.from({ length: 12 }, (_, i) => {
       const mes = String(i + 1).padStart(2, "0");
       return `${anio}-${mes}`;
     });
 
-    // 🔵 MOVIMIENTOS
-    const [movimientos] = await pool.query(`
-      SELECT 
-        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+    const resultado = [];
 
-        SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) entradas,
-        SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) salidas
+    for (const mes of meses) {
 
-      FROM movimientos_inventario mi
-      INNER JOIN productos p ON p.id = mi.producto_id
+      // 🔵 calcular fechas del mes
+      const inicio = `${mes}-01`;
 
-      WHERE 
-        mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-        AND YEAR(mi.fecha_validacion_logistica) = ?
-        AND p.categoria_id NOT IN (18, 33)
-        AND p.eliminado = 0
-        AND p.activo = 1
+      const [year, month] = mes.split("-").map(Number);
+      const lastDay = new Date(year, month, 0).getDate();
 
-      GROUP BY mes
-    `, [anio]);
+      const fin = `${mes}-${String(lastDay).padStart(2, "0")}`;
 
-    // 🔵 VALOR INVENTARIO ACUMULADO
-    const [valores] = await pool.query(`
-      WITH base AS (
-        SELECT 
-          DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
-
-          mi.producto_id,
-          mi.empresa_id,
-          mi.almacen_id,
-          IFNULL(mi.fabricante_id,0) fabricante_id,
-
-          mi.stock_resultante AS stock,
-          mi.costo_promedio_resultante AS costo,
-
-          ROW_NUMBER() OVER (
-            PARTITION BY 
-              DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m'),
-              mi.producto_id,
-              mi.empresa_id,
-              mi.almacen_id,
-              IFNULL(mi.fabricante_id,0)
-            ORDER BY mi.fecha_validacion_logistica DESC, mi.id DESC
-          ) rn
-
+      // =========================
+      // 🔵 ENTRADAS / SALIDAS (MES)
+      // =========================
+      const [[mov]] = await pool.query(`
+        SELECT
+          SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) entradas,
+          SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) salidas
         FROM movimientos_inventario mi
         INNER JOIN productos p ON p.id = mi.producto_id
-
         WHERE 
           mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND YEAR(mi.fecha_validacion_logistica) = ?
+          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
           AND p.categoria_id NOT IN (18, 33)
           AND p.eliminado = 0
           AND p.activo = 1
-      )
+      `, [inicio, `${fin} 23:59:59`]);
 
-      SELECT 
+      // =========================
+      // 🔵 VALOR INVENTARIO (ACUMULADO REAL)
+      // =========================
+      const [valRows] = await pool.query(queryValorPorFecha, [fin]);
+
+      resultado.push({
         mes,
-        ROUND(
-          SUM(SUM(stock * costo)) OVER (
-            ORDER BY mes
-            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-          ), 2
-        ) AS valor
-      FROM base
-      WHERE rn = 1
-      GROUP BY mes
-      ORDER BY mes
-    `, [anio]);
+        entradas: Number(mov?.entradas || 0),
+        salidas: Number(mov?.salidas || 0),
 
-    // 🔥 MAPAS
-    const mapMov = {};
-    movimientos.forEach(m => {
-      mapMov[m.mes] = m;
-    });
-
-    const mapVal = {};
-    valores.forEach(v => {
-      mapVal[v.mes] = v;
-    });
-
-    // 🔥 RESPUESTA FINAL
-    const resultado = meses.map(mes => ({
-      mes,
-      entradas: Number(mapMov[mes]?.entradas || 0),
-      salidas: Number(mapMov[mes]?.salidas || 0),
-      valor: Number(mapVal[mes]?.valor || 0)
-    }));
+        // 🔥 ESTE ES EL CLAVE
+        // valor del inventario HASTA ESE MES (no suma)
+        valor: Number(valRows[0]?.total || 0)
+      });
+    }
 
     res.json(resultado);
 
