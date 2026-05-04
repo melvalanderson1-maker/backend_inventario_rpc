@@ -337,11 +337,13 @@ exports.getKPIs = async (req, res) => {
       WHERE t.rn = 1
     `;
 
-    const [
-      valorInventario,
-      productosTotales,
-      productosConStock
-    ] = await Promise.all([
+      const [
+        valorInventario,
+        productosTotales,
+        productosConStock,
+        productosInmovilizados
+      ] = await Promise.all([
+
 
       pool.query(queryValorActual, [hoy]),
 
@@ -388,14 +390,46 @@ exports.getKPIs = async (req, res) => {
 
         ) t
         WHERE rn = 1 AND stock_resultante > 0
-      `, [hoy])
+      `, [hoy]),
+
+
+
+
+      pool.query(`
+        SELECT COUNT(*) total
+        FROM (
+          SELECT 
+            mi.producto_id,
+            MAX(mi.fecha_validacion_logistica) as ultima_fecha,
+            SUM(mi.stock_resultante) as stock
+
+          FROM movimientos_inventario mi
+          INNER JOIN productos p ON p.id = mi.producto_id
+
+          WHERE 
+            mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
+            AND p.eliminado = 0
+            AND p.activo = 1
+            ${filtroCategoria}
+
+          GROUP BY mi.producto_id
+
+          HAVING 
+            stock > 0
+            AND ultima_fecha < DATE_SUB(CURDATE(), INTERVAL 90 DAY)
+        ) t
+      `)
+
+
+
 
     ]);
 
     res.json({
       productos: productosTotales[0][0].total,
       productos_con_stock: productosConStock[0][0].total,
-      valor: Number(valorInventario[0][0].total || 0)
+      valor: Number(valorInventario[0][0].total || 0),
+      inmovilizado: productosInmovilizados?.[0]?.[0]?.total ?? 0
     });
 
   } catch (err) {
