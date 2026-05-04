@@ -64,11 +64,6 @@ SELECT
 
 p.codigo codigo_producto,
 p.descripcion producto,
-
-img.storage_provider,
-img.storage_key,
-
-
 p.categoria_id,
 c.nombre categoria,
 
@@ -108,19 +103,6 @@ SUM(lv.valor_lote) OVER(PARTITION BY lv.producto_id),
 
 FROM lotes_valorizados lv
 JOIN productos p ON p.id=lv.producto_id
-
-JOIN productos p ON p.id=lv.producto_id
-
-LEFT JOIN (
-  SELECT 
-    producto_id,
-    MIN(storage_provider) AS storage_provider,
-    MIN(storage_key) AS storage_key
-  FROM imagenes
-  WHERE tipo = 'producto'
-  GROUP BY producto_id
-) img ON img.producto_id = p.id
-
 JOIN empresas e ON e.id=lv.empresa_id
 JOIN almacenes a ON a.id=lv.almacen_id
 LEFT JOIN fabricantes f ON f.id=lv.fabricante_id
@@ -274,10 +256,16 @@ function addPagination(query, req) {
 function joinImagenProducto() {
   return `
     LEFT JOIN (
-      SELECT producto_id, storage_provider, storage_key
-      FROM imagenes
-      WHERE tipo = 'producto'
-      ORDER BY id ASC
+      SELECT i1.producto_id, i1.storage_provider, i1.storage_key
+      FROM imagenes i1
+      INNER JOIN (
+        SELECT producto_id, MIN(id) AS min_id
+        FROM imagenes
+        WHERE tipo = 'producto'
+        GROUP BY producto_id
+      ) i2 
+        ON i1.producto_id = i2.producto_id 
+        AND i1.id = i2.min_id
     ) img ON img.producto_id = p.id
   `;
 }
@@ -1084,8 +1072,18 @@ exports.getSinMovimiento = async (req, res) => {
         img.storage_key
       FROM (${buildFilteredQuery(req)}) t
       JOIN productos p ON p.codigo = t.codigo_producto
-      LEFT JOIN imagenes img 
-        ON img.producto_id = p.id AND img.tipo='producto'
+      LEFT JOIN (
+        SELECT i1.producto_id, i1.storage_provider, i1.storage_key
+        FROM imagenes i1
+        INNER JOIN (
+          SELECT producto_id, MIN(id) AS min_id
+          FROM imagenes
+          WHERE tipo = 'producto'
+          GROUP BY producto_id
+        ) i2 
+          ON i1.producto_id = i2.producto_id 
+          AND i1.id = i2.min_id
+      ) img ON img.producto_id = p.id
 
       WHERE t.dias_sin_movimiento > ?
 
@@ -1119,8 +1117,18 @@ exports.getRankingAntiguedad = async (req, res) => {
 
       FROM (${buildFilteredQuery(req)}) t
       JOIN productos p ON p.codigo = t.codigo_producto
-      LEFT JOIN imagenes img 
-        ON img.producto_id = p.id AND img.tipo='producto'
+      LEFT JOIN (
+        SELECT i1.producto_id, i1.storage_provider, i1.storage_key
+        FROM imagenes i1
+        INNER JOIN (
+          SELECT producto_id, MIN(id) AS min_id
+          FROM imagenes
+          WHERE tipo = 'producto'
+          GROUP BY producto_id
+        ) i2 
+          ON i1.producto_id = i2.producto_id 
+          AND i1.id = i2.min_id
+      ) img ON img.producto_id = p.id
 
       GROUP BY 
         t.codigo_producto, 
