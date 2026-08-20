@@ -969,7 +969,8 @@ exports.getEntradasSalidasMes = async (req, res) => {
       SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) unidades_entrada,
       SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) unidades_salida,
 
-      -- 💰 KPI 3: MONTO EN SOLES MOVIDO (NUEVO)
+      -- 💰 KPI 3: MONTO EN SOLES MOVIDO
+      ROUND(SUM(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN mi.cantidad * mi.precio ELSE 0 END), 2) monto_inicial,
       ROUND(SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad * mi.precio ELSE 0 END), 2) monto_entrada,
       ROUND(SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad * mi.costo_promedio_resultante ELSE 0 END), 2) monto_salida
 
