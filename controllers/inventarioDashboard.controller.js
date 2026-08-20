@@ -967,7 +967,11 @@ exports.getEntradasSalidasMes = async (req, res) => {
       -- 🟢 KPI 2: CANTIDAD REAL MOVIDA
       SUM(CASE WHEN mi.tipo_movimiento = 'saldo_inicial' THEN mi.cantidad ELSE 0 END) unidades_inicial,
       SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) unidades_entrada,
-      SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) unidades_salida
+      SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) unidades_salida,
+
+      -- 💰 KPI 3: MONTO EN SOLES MOVIDO (NUEVO)
+      ROUND(SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad * mi.precio ELSE 0 END), 2) monto_entrada,
+      ROUND(SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad * mi.precio ELSE 0 END), 2) monto_salida
 
       FROM movimientos_inventario mi
       INNER JOIN productos p ON p.id = mi.producto_id
@@ -984,7 +988,6 @@ exports.getEntradasSalidasMes = async (req, res) => {
     res.status(500).json({ error: "Error entradas/salidas" });
   }
 };
-
 
 
 
