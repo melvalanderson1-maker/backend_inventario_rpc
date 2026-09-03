@@ -28,7 +28,9 @@ async function calcularCostoYStock(conn, {
       AND almacen_id = ?
       AND (fabricante_id <=> ?)
       AND estado IN ('VALIDADO_LOGISTICA', 'APROBADO_FINAL')
-      ORDER BY id DESC
+      ORDER BY
+      COALESCE(fecha_validacion_logistica, created_at) DESC,
+      id DESC
       LIMIT 1`,
       [producto_id, empresa_id, almacen_id, fabricante_id]
     );
@@ -44,8 +46,10 @@ async function calcularCostoYStock(conn, {
         AND empresa_id = ?
         AND almacen_id = ?
         AND estado IN ('VALIDADO_LOGISTICA', 'APROBADO_FINAL')
-        ORDER BY id DESC
-        LIMIT 1`,
+      ORDER BY
+      COALESCE(fecha_validacion_logistica, created_at) DESC,
+      id DESC
+      LIMIT 1`,
         [producto_id, empresa_id, almacen_id]
       );
     }

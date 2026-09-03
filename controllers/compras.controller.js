@@ -290,6 +290,7 @@ listarCategorias: async (req, res) => {
     });
   },
 
+  
 
 crearProducto: async (req, res) => {
   const conn = await pool.getConnection();

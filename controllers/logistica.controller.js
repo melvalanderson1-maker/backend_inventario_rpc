@@ -1064,7 +1064,7 @@ getUltimaObservacionLogistica: async (req, res) => {
           ON s_origen.producto_id = ca.producto_id
           AND s_origen.empresa_id = ca.empresa_origen_id
           AND s_origen.almacen_id = ca.almacen_origen_id
-          AND s_origen.fabricante_id = ca.fabricante_origen_id
+          AND (s_origen.fabricante_id <=> ca.fabricante_origen_id)
         INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
         WHERE ca.estado IN (?)
         ORDER BY ca.created_at ASC
@@ -1105,12 +1105,12 @@ listarCambiosAlmacenPendientes: async (req, res) => {
       LEFT JOIN almacenes ad ON ad.id = ca.almacen_destino_id
       LEFT JOIN fabricantes f ON f.id = ca.fabricante_origen_id
       LEFT JOIN fabricantes fd ON fd.id = ca.fabricante_id
-      -- ✅ JOIN con stock ORIGEN
+      -- ✅ JOIN con stock ORIGEN (null-safe)
       LEFT JOIN stock_producto s_origen 
         ON s_origen.producto_id = ca.producto_id
         AND s_origen.empresa_id = ca.empresa_origen_id
         AND s_origen.almacen_id = ca.almacen_origen_id
-        AND s_origen.fabricante_id = ca.fabricante_origen_id
+        AND (s_origen.fabricante_id <=> ca.fabricante_origen_id)
       INNER JOIN usuarios u ON u.id = ca.usuario_logistica_id
       WHERE ca.estado IN ('PENDIENTE_SALIDA','PENDIENTE_INGRESO')
       ORDER BY ca.created_at ASC
