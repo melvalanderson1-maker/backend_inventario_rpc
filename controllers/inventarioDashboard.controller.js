@@ -1370,67 +1370,150 @@ exports.getVariacionInventarioMes = async (req, res) => {
 // =====================================================
 exports.getResumenAnual = async (req, res) => {
   try {
-    const anio = Number(req.query.anio);
+    const anio = Number(req.query.anio || new Date().getFullYear());
 
     if (!anio || isNaN(anio)) {
       return res.status(400).json({ error: "Año inválido" });
     }
 
-    // 🔥 GENERAR 12 MESES
+    // =====================================================
+    // GENERAR ENERO - DICIEMBRE
+    // =====================================================
     const meses = Array.from({ length: 12 }, (_, i) => {
       const mes = String(i + 1).padStart(2, "0");
       return `${anio}-${mes}`;
     });
 
+    // =====================================================
+    // 1. TRAER TODOS LOS MOVIMIENTOS DEL AÑO EN UNA QUERY
+    // =====================================================
+    const [movimientosRows] = await pool.query(`
+      SELECT
+        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m') AS mes,
+
+        COUNT(
+          CASE
+            WHEN mi.tipo_movimiento = 'entrada' THEN 1
+          END
+        ) AS movimientos_entrada,
+
+        COUNT(
+          CASE
+            WHEN mi.tipo_movimiento = 'salida' THEN 1
+          END
+        ) AS movimientos_salida,
+
+        SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'entrada'
+            THEN mi.cantidad
+            ELSE 0
+          END
+        ) AS entradas,
+
+        SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'salida'
+            THEN mi.cantidad
+            ELSE 0
+          END
+        ) AS salidas
+
+      FROM movimientos_inventario mi
+
+      INNER JOIN productos p
+        ON p.id = mi.producto_id
+
+      WHERE
+        mi.estado IN (
+          'VALIDADO_LOGISTICA',
+          'APROBADO_FINAL'
+        )
+
+        AND mi.fecha_validacion_logistica >= ?
+        AND mi.fecha_validacion_logistica < ?
+
+        AND p.categoria_id NOT IN (18, 33)
+        AND p.eliminado = 0
+        AND p.activo = 1
+
+      GROUP BY
+        DATE_FORMAT(mi.fecha_validacion_logistica, '%Y-%m')
+
+      ORDER BY mes ASC
+    `, [
+      `${anio}-01-01 00:00:00`,
+      `${anio + 1}-01-01 00:00:00`
+    ]);
+
+    // =====================================================
+    // 2. CREAR MAPA DE MOVIMIENTOS
+    // =====================================================
+    const movimientosMap = {};
+
+    movimientosRows.forEach(row => {
+      movimientosMap[row.mes] = {
+        movimientos_entrada: Number(row.movimientos_entrada || 0),
+        movimientos_salida: Number(row.movimientos_salida || 0),
+        entradas: Number(row.entradas || 0),
+        salidas: Number(row.salidas || 0)
+      };
+    });
+
+    // =====================================================
+    // 3. CALCULAR VALOR DEL INVENTARIO AL CIERRE DE CADA MES
+    //
+    // IMPORTANTE:
+    // Conservamos exactamente queryValorPorFecha,
+    // porque calcula el stock/costo real acumulado.
+    // =====================================================
     const resultado = [];
 
     for (const mes of meses) {
 
-      // 🔵 calcular fechas del mes
-      const inicio = `${mes}-01`;
-
       const [year, month] = mes.split("-").map(Number);
+
       const lastDay = new Date(year, month, 0).getDate();
 
       const fin = `${mes}-${String(lastDay).padStart(2, "0")}`;
 
-      // =========================
-      // 🔵 ENTRADAS / SALIDAS (MES)
-      // =========================
-      const [[mov]] = await pool.query(`
-        SELECT
-          SUM(CASE WHEN mi.tipo_movimiento = 'entrada' THEN mi.cantidad ELSE 0 END) entradas,
-          SUM(CASE WHEN mi.tipo_movimiento = 'salida' THEN mi.cantidad ELSE 0 END) salidas
-        FROM movimientos_inventario mi
-        INNER JOIN productos p ON p.id = mi.producto_id
-        WHERE 
-          mi.estado IN ('VALIDADO_LOGISTICA','APROBADO_FINAL')
-          AND mi.fecha_validacion_logistica BETWEEN ? AND ?
-          AND p.categoria_id NOT IN (18, 33)
-          AND p.eliminado = 0
-          AND p.activo = 1
-      `, [inicio, `${fin} 23:59:59`]);
+      const [valRows] = await pool.query(
+        queryValorPorFecha,
+        [fin]
+      );
 
-      // =========================
-      // 🔵 VALOR INVENTARIO (ACUMULADO REAL)
-      // =========================
-      const [valRows] = await pool.query(queryValorPorFecha, [fin]);
+      const mov = movimientosMap[mes] || {};
 
       resultado.push({
         mes,
-        entradas: Number(mov?.entradas || 0),
-        salidas: Number(mov?.salidas || 0),
 
-        // 🔥 ESTE ES EL CLAVE
-        // valor del inventario HASTA ESE MES (no suma)
-        valor: Number(valRows[0]?.total || 0)
+        entradas: Number(mov.entradas || 0),
+        salidas: Number(mov.salidas || 0),
+
+        movimientos_entrada: Number(
+          mov.movimientos_entrada || 0
+        ),
+
+        movimientos_salida: Number(
+          mov.movimientos_salida || 0
+        ),
+
+        valor: Number(
+          valRows[0]?.total || 0
+        )
       });
     }
 
+    // =====================================================
+    // 4. ASEGURAR SIEMPRE LOS 12 MESES
+    // =====================================================
     res.json(resultado);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error resumen anual" });
+    console.error("ERROR RESUMEN ANUAL:", err);
+
+    res.status(500).json({
+      error: "Error resumen anual"
+    });
   }
 };
