@@ -30,6 +30,13 @@ const catalogosRoutes = require("./routes/catalogos.routes");
 
 const app = express();
 
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ Unhandled Rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught Exception:", err);
+});
+
 console.log("TOKEN MP:", process.env.MP_ACCESS_TOKEN);
 console.log("FRONT_URL usando:", process.env.FRONT_URL);
 

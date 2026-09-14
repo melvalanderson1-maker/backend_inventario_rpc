@@ -810,17 +810,32 @@ generarSesionesAutomaticas: async (req, res) => {
   // PAGOS / FACTURAS / AUDITORIA
   // ─────────────────────────────────────────────
   listarPagos: async (req, res) => {
-    const [rows] = await pool.query("SELECT * FROM pagos");
-    res.json({ ok: true, pagos: rows });
+    try {
+      const [rows] = await pool.query("SELECT * FROM pagos");
+      res.json({ ok: true, pagos: rows });
+    } catch (err) {
+      console.error("listarPagos:", err.message);
+      res.status(500).json({ ok: false, msg: err.message });
+    }
   },
 
   listarFacturas: async (req, res) => {
-    const [rows] = await pool.query("SELECT * FROM facturas");
-    res.json({ ok: true, facturas: rows });
+    try {
+      const [rows] = await pool.query("SELECT * FROM facturas");
+      res.json({ ok: true, facturas: rows });
+    } catch (err) {
+      console.error("listarFacturas:", err.message);
+      res.status(500).json({ ok: false, msg: err.message });
+    }
   },
 
   listarAuditoria: async (req, res) => {
-    const [rows] = await pool.query("SELECT * FROM auditoria");
-    res.json({ ok: true, auditoria: rows });
+    try {
+      const [rows] = await pool.query("SELECT * FROM auditoria");
+      res.json({ ok: true, auditoria: rows });
+    } catch (err) {
+      console.error("listarAuditoria:", err.message);
+      res.status(500).json({ ok: false, msg: err.message });
+    }
   },
 };
