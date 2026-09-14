@@ -1393,6 +1393,12 @@ exports.getResumenAnual = async (req, res) => {
 
         COUNT(
           CASE
+            WHEN mi.tipo_movimiento = 'saldo_inicial' THEN 1
+          END
+        ) AS movimientos_inicial,
+
+        COUNT(
+          CASE
             WHEN mi.tipo_movimiento = 'entrada' THEN 1
           END
         ) AS movimientos_entrada,
@@ -1402,6 +1408,14 @@ exports.getResumenAnual = async (req, res) => {
             WHEN mi.tipo_movimiento = 'salida' THEN 1
           END
         ) AS movimientos_salida,
+
+        SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'saldo_inicial'
+            THEN mi.cantidad
+            ELSE 0
+          END
+        ) AS inicial,
 
         SUM(
           CASE
@@ -1417,7 +1431,31 @@ exports.getResumenAnual = async (req, res) => {
             THEN mi.cantidad
             ELSE 0
           END
-        ) AS salidas
+        ) AS salidas,
+
+        ROUND(SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'saldo_inicial'
+            THEN mi.cantidad * mi.precio
+            ELSE 0
+          END
+        ), 2) AS monto_inicial,
+
+        ROUND(SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'entrada'
+            THEN mi.cantidad * mi.precio
+            ELSE 0
+          END
+        ), 2) AS monto_entrada,
+
+        ROUND(SUM(
+          CASE
+            WHEN mi.tipo_movimiento = 'salida'
+            THEN mi.cantidad * mi.costo_promedio_resultante
+            ELSE 0
+          END
+        ), 2) AS monto_salida
 
       FROM movimientos_inventario mi
 
@@ -1453,10 +1491,15 @@ exports.getResumenAnual = async (req, res) => {
 
     movimientosRows.forEach(row => {
       movimientosMap[row.mes] = {
+        movimientos_inicial: Number(row.movimientos_inicial || 0),
         movimientos_entrada: Number(row.movimientos_entrada || 0),
         movimientos_salida: Number(row.movimientos_salida || 0),
+        inicial: Number(row.inicial || 0),
         entradas: Number(row.entradas || 0),
-        salidas: Number(row.salidas || 0)
+        salidas: Number(row.salidas || 0),
+        monto_inicial: Number(row.monto_inicial || 0),
+        monto_entrada: Number(row.monto_entrada || 0),
+        monto_salida: Number(row.monto_salida || 0)
       };
     });
 
@@ -1487,8 +1530,13 @@ exports.getResumenAnual = async (req, res) => {
       resultado.push({
         mes,
 
+        inicial: Number(mov.inicial || 0),
         entradas: Number(mov.entradas || 0),
         salidas: Number(mov.salidas || 0),
+
+        movimientos_inicial: Number(
+          mov.movimientos_inicial || 0
+        ),
 
         movimientos_entrada: Number(
           mov.movimientos_entrada || 0
@@ -1497,6 +1545,10 @@ exports.getResumenAnual = async (req, res) => {
         movimientos_salida: Number(
           mov.movimientos_salida || 0
         ),
+
+        monto_inicial: Number(mov.monto_inicial || 0),
+        monto_entrada: Number(mov.monto_entrada || 0),
+        monto_salida: Number(mov.monto_salida || 0),
 
         valor: Number(
           valRows[0]?.total || 0
