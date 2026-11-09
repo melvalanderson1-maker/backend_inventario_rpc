@@ -1,0 +1,17 @@
+﻿node_modules/
+.env
+.env.*
+!.env.example
+.localenv
+*.backup
+npm-debug.log*
+
+node_modules/
+.env
+.localenv
+*.backup
+
+.env
+.localenv
+.env.*
+!.env.example
